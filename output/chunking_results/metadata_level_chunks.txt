@@ -1,7 +1,7 @@
 ====================================================================================================
 HIERARCHICAL CHUNKING RESULTS - METADATA LEVEL
-Generated: 2025-11-13 12:42:40
-Total Chunks: 4
+Generated: 2025-11-24 20:11:52
+Total Chunks: 7
 ====================================================================================================
 
 >>> MEETING: data001 <<<
@@ -11,21 +11,55 @@ Total Chunks: 4
 Chunk ID: data001_metadata
 Meeting ID: data001
 Level: metadata
-Text Length: 847 characters
+Text Length: 493 characters
 
 Text Content:
 ----------------------------------------------------------------------------------------------------
-Meeting ID: data001
-Title: Build 2025 — Satya Nadella x Elon Musk: Launching Grok 3.5 on Azure
-Date and Time: 2025-11-04T20:21:00+08:00
-Duration: 400 seconds
-Language: en
-Meeting Type: Fireside Chat
-Participants: Satya Nadella (CEO, Microsoft), Elon Musk (CEO, xAI / Tesla / SpaceX)
-Organizations: Microsoft, xAI, Tesla, SpaceX
-Topics: Early Computing and Programming Background, Grok Model Vision and Philosophy, Grounding AI in Physical Reality, Developer Collaboration and Future Outlook
-Keywords: Grok, Azure, AI Safety, Physics Reasoning, Developer Feedback, Build 2025
-Brief Summary: At Microsoft Build 2025, Satya Nadella and Elon Musk discussed Grok 3.5’s Azure launch, focusing on physics-based reasoning, AI safety through honesty and minimal error, and the importance of developer feedback to evolve language, vision, and action models.
+Brief Summary: At Microsoft Build 2025, Satya Nadella and Elon Musk discussed Grok 3.5’s Azure launch, focusing on physics-based reasoning, grounding in real-world constraints, AI safety via honesty, and the importance of developer feedback to evolve model capability and efficiency.
+Collect developer feedback about Grok 3.5 usage on Azure and channel it to improve future iterations.
+Encourage developers to send feedback on Grok’s issues and improvement requests as highlighted in the talk.
+----------------------------------------------------------------------------------------------------
+
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data010 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #2]
+Chunk ID: data010_metadata
+Meeting ID: data010
+Level: metadata
+Text Length: 621 characters
+
+Text Content:
+----------------------------------------------------------------------------------------------------
+Brief Summary: In this technical discussion, Ankit and Hongye Qian explore the process of metadata embedding, focusing on reference number generation and the use of cosine similarity for queries. They discuss the implications of metadata accuracy on the overall system performance and consider potential improvements for handling larger datasets.
+Hongye Qian will draw a flow diagram to visualize the steps involved in the metadata embedding process, which will help clarify the discussion points.
+Ankit will work on integrating the LLM into the metadata embedding process and conduct tests to evaluate its effectiveness.
+----------------------------------------------------------------------------------------------------
+
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data011 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #3]
+Chunk ID: data011_metadata
+Meeting ID: data011
+Level: metadata
+Text Length: 553 characters
+
+Text Content:
+----------------------------------------------------------------------------------------------------
+Brief Summary: In this technical discussion, Ankit and Hongye Qian explore the implementation of Elastic Search, focusing on the differences between dense and sparse factors, and the importance of filters for improving search efficiency. They also discuss the challenges faced during testing and the need for further refinement in their approach.
+Hongye will conduct tests on Elastic Search using filters to improve the accuracy of search results.
+Ankit will gather real conversation transcripts to include in the testing data for better model training.
 ----------------------------------------------------------------------------------------------------
 
 
@@ -36,25 +70,17 @@ Brief Summary: At Microsoft Build 2025, Satya Nadella and Elon Musk discussed Gr
 >>> MEETING: data004 <<<
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[CHUNK #2]
+[CHUNK #4]
 Chunk ID: data004_metadata
 Meeting ID: data004
 Level: metadata
-Text Length: 1097 characters
+Text Length: 530 characters
 
 Text Content:
 ----------------------------------------------------------------------------------------------------
-Meeting ID: data004
-Title: Confidence isn't loud, here's how to find your voice | Nimi Mehta
-Date and Time: 2024-04-14T00:00:00Z
-Duration: 3047 seconds
-Language: en
-Meeting Type: Podcast Interview
-Participants: Nimi Mehta (CEO, Speaker by Nimi Mehta), Host (Host, The Balance Theory Podcast)
-Organizations: Speaker by Nimi Mehta, The Balance Theory Podcast
-Topics: Early Career and First Setback (MTV Experience), Persistence and Career Rebuilding, Transition to Entrepreneurship and Choosing Fear, Intuition, Body Awareness, and Decision-Making, Finding and Protecting One’s Voice, Balancing Kindness and Assertiveness, Confidence, Reflection, and Emotional Awareness
-Keywords: Nimi Mehta, Persistence, Visualization, Goal Setting, 5-Second Rule, Voice Layer Theory, Confidence, Assertiveness, Personal Alignment
 Brief Summary: Nimi Mehta discusses her career transition from MTV to a top radio host, emphasizing persistence, visualization, and choosing fear over stagnation. She introduces the Voice Layer Theory for finding one's authentic voice, and the discipline of being kind yet assertive.
+Continue developing and promoting the Voice Layer Theory as a framework for helping individuals find their authentic voice.
+Integrate topics from this conversation (confidence, assertiveness, voice alignment) into future podcast content strategy.
 ----------------------------------------------------------------------------------------------------
 
 
@@ -65,25 +91,17 @@ Brief Summary: Nimi Mehta discusses her career transition from MTV to a top radi
 >>> MEETING: data006 <<<
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[CHUNK #3]
+[CHUNK #5]
 Chunk ID: data006_metadata
 Meeting ID: data006
 Level: metadata
-Text Length: 996 characters
+Text Length: 648 characters
 
 Text Content:
 ----------------------------------------------------------------------------------------------------
-Meeting ID: data006
-Title: NVIDIA CEO Jensen Huang's Vision for the Future
-Date and Time: 2025-01-07T00:00:00Z
-Duration: 3771 seconds
-Language: en
-Meeting Type: Interview
-Participants: Jensen Huang (CEO, Nvidia), Cleo Abram (Host, Huge If True)
-Organizations: Nvidia, Huge If True
-Topics: Early Career and First Setback (MTV Experience), Persistence and Career Rebuilding, Transition to Entrepreneurship and Choosing Fear, Intuition, Body Awareness, and Decision-Making, Finding and Protecting One’s Voice, Balancing Kindness and Assertiveness, Confidence, Reflection, and Emotional Awareness
-Keywords: Jensen Huang, Nvidia, AI, GPU, CUDA, Parallel Processing, Robotics, Omniverse, Cosmos, AI Safety
-Brief Summary: Nvidia CEO Jensen Huang discusses the evolution of computing from parallel processing (GPUs) to the AI revolution (CUDA, AlexNet), and outlines his future vision for physical AI (robotics) trained in digital twins (Omniverse, Cosmos), urging everyone to use AI as a personal tutor.
+Brief Summary: Jensen Huang reflects on Nvidia's foundational insights—from parallel processing to CUDA—and outlines how GPUs became the engine for modern AI. He describes the rise of deep learning after AlexNet, the creation of Omniverse and Cosmos for robotics, and predicts a future where physical AI, digital biology, and personal AI tutors profoundly transform daily life.
+Continue advancing Omniverse + Cosmos integration to accelerate training and deployment of physical AI and humanoid robotics.
+Produce follow-up educational content explaining core computing shifts (parallel processing, CUDA, world models) for broad public understanding.
 ----------------------------------------------------------------------------------------------------
 
 
@@ -94,25 +112,39 @@ Brief Summary: Nvidia CEO Jensen Huang discusses the evolution of computing from
 >>> MEETING: data007 <<<
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[CHUNK #4]
+[CHUNK #6]
 Chunk ID: data007_metadata
 Meeting ID: data007
 Level: metadata
-Text Length: 1017 characters
+Text Length: 632 characters
 
 Text Content:
 ----------------------------------------------------------------------------------------------------
-Meeting ID: data007
-Title: Shou Chew: TikTok's CEO on AI, data, and the future | TED2023
-Date and Time: 2023-04-19T12:00:00+00:00
-Duration: 2350 seconds
-Language: en
-Meeting Type: Interview
-Participants: Shou Chew (CEO, TikTok), Chris Anderson (Head of TED)
-Organizations: TikTok, TED, ByteDance
-Topics: Discovery-First Design vs. Social Graph, Recommendation Mechanics & Early Growth Fairness, Platform DNA vs. Competitors & Filter Bubbles, Community Guidelines & Youth Protections, Screen Time, Addiction Risk & Digital Wellness, U.S. vs. China Youth Experience — Clarification, Harmful Trends, Sexualized Content & Moderation at Scale, Data Security, ByteDance Links & Project Texas
-Keywords: TikTok, Shou Chew, TED2023, Algorithm, Data Privacy, Project Texas, Content Moderation, ByteDance
 Brief Summary: At TED2023, TikTok CEO Shou Chew discussed the platform's interest-based algorithm, content moderation policies, and addressed U.S. national security concerns over data and China by detailing 'Project Texas'.
+Further implement and transparently communicate TikTok's data security and localization initiative (Project Texas) to regulators and users.
+Operate and improve teen safety systems, including default screen-time limits, restricted features, content filters and in-app safety education flows.
+Collaborate with external partners and parents to promote Family Pairing and healthy screen-time education resources.
+----------------------------------------------------------------------------------------------------
+
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data008 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #7]
+Chunk ID: data008_metadata
+Meeting ID: data008
+Level: metadata
+Text Length: 814 characters
+
+Text Content:
+----------------------------------------------------------------------------------------------------
+Brief Summary: The discussion features Elon Musk and Jensen Huang exploring the future of AI, robotics, energy systems, and large-scale compute. They highlight the transition from retrieval-based computing to generative AI, the rise of humanoid robots, and the global need for AI factories. Broader topics include productivity, workforce changes, space-based compute, major US–Saudi AI partnerships, and emerging scientific and industrial applications enabled by advanced AI systems.
+Continue coordinating with partners in the Kingdom of Saudi Arabia and Nvidia to build and deploy the planned 500-megawatt AI compute infrastructure, starting with the 50MW first phase.
+Deepen work with Humane to apply Nvidia’s Omniverse platform to robotics, digital factories, and quantum simulation initiatives in Saudi Arabia.
 ----------------------------------------------------------------------------------------------------
 
 

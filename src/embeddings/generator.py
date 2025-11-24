@@ -26,7 +26,7 @@ class EmbeddingGenerator:
     - Different chunk levels (metadata, summary, meeting)
     """
     
-    def __init__(self, model_name: str = None, **kwargs):
+    def __init__(self, model_name: str | None = None , **kwargs):
         """
         Initialize the embedding generator
         

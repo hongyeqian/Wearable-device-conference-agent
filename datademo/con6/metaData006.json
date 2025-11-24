@@ -64,6 +64,8 @@
 
   "actions": [
     {
+      "action_id": "M006-A01",
+      "task": "Advance fusion of Omniverse and Cosmos as a foundation for robot training and digital twin simulation.",
       "assignee": {
         "name": "Jensen Huang",
         "role": "CEO, Nvidia",
@@ -75,6 +77,8 @@
       "priority": "high"
     },
     {
+      "action_id": "M006-A02",
+      "task": "Promote AI literacy and tutoring for the next generation.",
       "assignee": {
         "name": "Cleo Abram",
         "role": "Host, Huge If True",

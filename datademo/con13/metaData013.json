@@ -1,0 +1,80 @@
+{
+  "meeting_id": "data013",
+  "title": "Discussion on architecture design with Ankit and Hongye Qian",
+  "datetime": null,
+  "duration_sec": 0,
+  "language": "en",
+  "source_url": null,
+  "meeting_type": "Technical Discussion",
+
+  "participants": [
+    {
+      "name": "Ankit",
+      "role": "Participant",
+      "aliases": []
+    },
+    {
+      "name": "Hongye Qian",
+      "role": "Participant",
+      "aliases": []
+    }
+  ],
+
+  "organizations": [],
+  
+  "topics": [
+    "Architecture design",
+    "Metadata handling",
+    "User query processing"
+  ],
+
+  "keywords": [
+    "architecture",
+    "metadata",
+    "summarization",
+    "user query",
+    "semantic normalization",
+    "data structure",
+    "BFS",
+    "LLM"
+  ],
+
+  "related_files": {
+    "transcript": "data013.md",
+    "meeting_summary": "meetLevel013.md",
+    "summary_embedding": "summary013.md"
+  },
+
+  "embedding_text_pointer": "summary013.md",
+
+  "summary_brief": "Ankit and Hongye Qian discuss the design of an architecture for processing user queries and handling metadata. They explore various approaches to summarization and the implications of different architectural choices on computational costs and user experience.",
+
+  "actions": [
+    {
+      "action_id": "M013-A01",
+      "task": "Begin coding the second architecture",
+      "assignee": {
+        "name": "Hongye Qian",
+        "role": "Participant",
+        "aliases": []
+      },
+      "description_plain": "Hongye Qian will start implementing the second architecture as discussed in the meeting.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "medium"
+    },
+    {
+      "action_id": "M013-A02",
+      "task": "Prepare a detailed system diagram",
+      "assignee": {
+        "name": "Ankit",
+        "role": "Participant",
+        "aliases": []
+      },
+      "description_plain": "Ankit will create a detailed system diagram to illustrate the design choices and architecture discussed.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "low"
+    }
+  ]
+}

@@ -25,7 +25,7 @@ class ChunkMetadata:
     chunk_id: str
     text: str
     #metadata: Dict[str, Any]
-    metadata: {}
+    metadata: Dict[str, Any]
 
 
 
@@ -76,7 +76,6 @@ class HierarchicalChunker:
         Args:
             meetings: list of meetings
             include_chunk_level: whether to include fine-grained chunk level (default: False)
-                                Legacy parameter for compatibility, not recommended for use
             
         Returns:
             dictionary containing all level chunking results
@@ -131,64 +130,49 @@ class HierarchicalChunker:
         """
         Metadata level: convert structured metadata (JSON) to text format for embedding
         """
-        # construct structured text from Meeting.metadata (JSON dict)
-        metadata_text_parts = [
-            f"Meeting ID: {meeting.meeting_id}",
-            f"Title: {meeting.title}",
-            f"Date and Time: {meeting.datetime}",
-            f"Duration: {meeting.duration_sec} seconds",
-            f"Language: {meeting.language}",
-            f"Meeting Type: {meeting.meeting_type}",
-        ]
         
-        # add participants information (for entity filtering)
-        if meeting.participants:
-            participants_str = ", ".join([
-                f"{p.get('name', '')} ({p.get('role', '')})" 
-                if isinstance(p, dict) else str(p)
-                for p in meeting.participants
-            ])
-            metadata_text_parts.append(f"Participants: {participants_str}")
         
-        # add organizations information (for entity filtering)
-        if meeting.organizations:
-            orgs_str = ", ".join(meeting.organizations)
-            metadata_text_parts.append(f"Organizations: {orgs_str}")
-        
-        # add topics information (for topic filtering)
-        if meeting.topics:
-            topics_str = ", ".join(meeting.topics)
-            metadata_text_parts.append(f"Topics: {topics_str}")
-        
-        # add keywords information (for topic filtering)
-        if meeting.keywords:
-            keywords_str = ", ".join(meeting.keywords)
-            metadata_text_parts.append(f"Keywords: {keywords_str}")
+        embedding_text_parts = [];
+    
         
         # add brief summary (for semantic understanding)
         if meeting.summary_brief:
-            metadata_text_parts.append(f"Brief Summary: {meeting.summary_brief}")
+            embedding_text_parts.append(f"Brief Summary: {meeting.summary_brief}")
         
-        metadata_text = "\n".join(metadata_text_parts)
+        
+        actions = meeting.metadata.get('actions', [])
+        if actions:
+            for action in actions:
+                description_plain =action.get('description_plain', '')
+                if description_plain:
+                    embedding_text_parts.append(description_plain)
+                    
+                    
+        embedding_text = "\n".join(embedding_text_parts) if embedding_text_parts else ""
+        
+        metadata_dict ={
+            'meeting_id': meeting.meeting_id,
+            'title': meeting.title,
+            'datetime': str(meeting.datetime),
+            'duration_sec': meeting.duration_sec,
+            'language': meeting.language,
+            'meeting_type': meeting.meeting_type,
+            'participants': meeting.participants,
+            'organizations': meeting.organizations,
+            'topics': meeting.topics,
+            'keywords': meeting.keywords,
+            'summary_brief': meeting.summary_brief
+        }
+        
+        if actions:
+            metadata_dict['actions'] = actions
         
         return [ChunkMetadata(
             meeting_id=meeting.meeting_id,
             level='metadata',
             chunk_id=f"{meeting.meeting_id}_metadata",
-            text=metadata_text,  # this text will be embedded, for semantic search
-            metadata={
-                'meeting_id': meeting.meeting_id,
-                'title': meeting.title,
-                'datetime': str(meeting.datetime),
-                'duration_sec': meeting.duration_sec,
-                'language': meeting.language,
-                'meeting_type': meeting.meeting_type,
-                'participants': meeting.participants,
-                'organizations': meeting.organizations,
-                'topics': meeting.topics,
-                'keywords': meeting.keywords,
-                'summary_brief': meeting.summary_brief
-            }
+            text=embedding_text,  # this text will be embedded, for semantic search
+            metadata= metadata_dict
         )]
 
 

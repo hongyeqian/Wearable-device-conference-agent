@@ -1,0 +1,192 @@
+# Meeting Level Summary
+
+## Key Topics
+
+- **Topic Title:** Reference IDs and metadata–summary linkage
+  - Topic id: M010-T01
+  - Reference: P001–P027
+  - Summary:
+      - [00:01] Ankit: Asks Hongye to show how references are handled in the trunk code.
+      - [00:14] Hongye Qian: Explains that the trunk split code extracts indexes and stores them in the trunk metadata.
+      - [01:34] Hongye Qian: Clarifies that she manually assigns reference numbers and ensures they are not duplicated across meetings.
+      - [02:14] Ankit: Confirms the reference pattern (e.g., M004 followed by topic) and asks about the meaning of the S prefix.
+      - [02:25] Hongye Qian: Explains that S refers to summary-level IDs and topics are linked to mid-level summaries, and offers to show a concrete test case.
+      - [03:35] Hongye Qian: Describes how the metadata step first identifies Data004 and then finds three related summary chunks, but only one is used because the dataset is very small.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [00:01–05:56]
+
+- **Topic Title:** Metadata embedding fields and inverted index design
+  - Topic id: M010-T02
+  - Reference: P028–P083
+  - Summary:
+      - [06:00] Hongye Qian: Shows how an extract method is used in the pipeline and confirms that a hybrid approach (vector + BM25) is still being used, starting from metadata.
+      - [06:31] Ankit: Asks Hongye to create a clearer flow diagram in PPT form to make the retrieval process easier to visualize.
+      - [08:09] Hongye Qian: States that at the metadata embedding level, she only embeds the summary brief and the action description for each action item.
+      - [08:38] Ankit: Confirms that the summary brief is a very concise summary describing the action.
+      - [08:47] Hongye Qian: Distinguishes between the summary (a very high-level summary of the meeting) and the description (a condensed explanation of the action item itself).
+      - [09:40] Ankit: Suggests using better variable names for clarity in the code and asks to go back to the presentation.
+      - [12:53] Ankit: Asks exactly what fields are compared at metadata level (brief summary and action item description).
+      - [13:16] Hongye Qian: Explains that many metadata entries (summary brief + description) can map to one dataset ID (inverted index concept).
+  - Participants: Ankit; Hongye Qian
+  - Duration: [06:00–15:50]
+
+- **Topic Title:** Building metadata embeddings and selecting top metadata candidates
+  - Topic id: M010-T03
+  - Reference: P084–P154
+  - Summary:
+      - [16:22] Hongye Qian: Shows an example of the metadata embedding “trunk”, where two lines hold the description and one line holds a very brief summary.
+      - [17:32] Hongye Qian: Confirms that these three pieces (brief summary and descriptions) are concatenated and turned into a single embedding.
+      - [18:39] Ankit: Asks about the embedding dimension; Hongye replies it is around 1300 based on the OpenAI model she is using.
+      - [19:32] Hongye Qian: Explains that summary-level embeddings are created differently, directly from split text chunks.
+      - [20:42] Ankit: Confirms that cosine similarity is used to compare query embeddings with metadata embeddings.
+      - [21:14] Hongye Qian: States that the metadata comparison returns a dictionary-like structure containing indexes and related information, rather than raw sentences.
+      - [24:30] Ankit: Clarifies that the comparison is between a single query embedding and a single description embedding, and asks how multiple results can come back.
+      - [24:55] Hongye Qian: Explains that metadata is mainly used to “find the direction” towards the correct summary, and that currently she uses top-1 selection because the dataset is very small.
+      - [29:28] Hongye Qian: Notes that top-1 metadata selection is a design choice for the current test case and a potential issue to revisit for larger datasets.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [16:15–29:51]
+
+- **Topic Title:** Segment handling and mapping summary chunks to meeting embeddings
+  - Topic id: M010-T04
+  - Reference: P155–P213
+  - Summary:
+      - [00:04] Ankit: Points to a specific function and asks Hongye to explain how it behaves when a segment is long.
+      - [00:21] Hongye Qian: Explains that if the correct segment is long, the function records the last bullet point and repeats it at the start of the next segment to maintain continuity.
+      - [02:18] Ankit: Writes down a textual description of the retrieval pipeline in the chat so Hongye can copy it into her notes and diagrams.
+      - [03:07] Ankit: Asks her to place screenshots of summary embeddings into the slide deck to illustrate the process.
+      - [04:02] Hongye Qian: Shows the original summary and confirms which example is being discussed.
+      - [05:36] Hongye Qian: Describes how, after summary-level cosine similarity, a function extracts reference IDs (e.g., M004, T0xx, A0xx) from the top-1 chunk and stores them in a list.
+      - [07:21] Ankit: Asks Hongye to clearly note the output format, such as “chunk 3 → M004-T06-A23”.
+      - [08:21] Hongye Qian: Explains that these extracted IDs are then used to locate corresponding meeting-level embeddings for further comparison.
+      - [09:44] Ankit: Confirms that meeting-level cosine similarity is then performed on the selected meeting chunks.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [00:00–09:44]
+
+- **Topic Title:** Meeting-level embeddings, topic chunks, and FAISS index usage
+  - Topic id: M010-T05
+  - Reference: P214–P290
+  - Summary:
+      - [11:08] Ankit: Clarifies that meeting-level similarity is computed between the query embedding and meeting embeddings.
+      - [11:47] Hongye Qian: States that meeting-level chunks are derived by splitting the original meeting text.
+      - [13:02] Ankit: Asks about the difference between topic-level chunks and summary-level chunks.
+      - [13:16] Hongye Qian: Explains that topic-level chunks are different from summary-level ones; topics come from a separate topic-splitting process.
+      - [14:29] Ankit: Asks Hongye to scroll through Data004 so he can compare the original text with the chunked versions.
+      - [15:02] Ankit: Asks whether topic IDs and reference IDs are included in the text that gets embedded.
+      - [15:24] Hongye Qian: Notes that these IDs are currently present in the chunks but could be removed in a later refinement.
+      - [16:36] Ankit: Confirms that after metadata and summary filtering, a list of relevant meeting IDs is used to restrict which meeting embeddings are compared.
+      - [19:20] Hongye Qian: Walks through the search method that first calls a metadata search, then uses vector search and BM25 in parallel within FAISS-based stores.
+      - [20:52] Ankit: Reviews how embeddings are normalized and how FAISS indices store vectors with simple integer IDs separate from semantic IDs like “data001”.
+      - [24:22] Hongye Qian: Explains that BM25 tokenizes the query and counts token occurrences across documents, complementing the vector search.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [11:08–24:27]
+
+- **Topic Title:** BM25 on summarized text and risk of missing query keywords
+  - Topic id: M010-T06
+  - Reference: P291–P306
+  - Summary:
+      - [24:48] Ankit: Raises a concern that because the system already summarizes the text, BM25 may fail if the queried keyword does not appear in the summary.
+      - [25:31] Ankit: Asks whether Hongye has observed cases during testing where BM25 fails due to missing words in the summary.
+      - [25:35] Hongye Qian: Answers that if the queried word does not appear, the BM25 score becomes zero.
+      - [25:54] Ankit: Emphasizes that BM25 is currently applied on top of summaries rather than on full text.
+      - [26:01] Ankit: Points out that summaries are very high-level and may eliminate important query terms.
+      - [26:12] Ankit: Explains that, to make concise summaries, the language model may drop exact words like “industry aligned”, making BM25 blind to them.
+      - [26:56] Ankit: Uses a toy example where the original text mentions “NTU offers industry aligned courses”, but a compressed summary no longer contains those words, so BM25 would not match.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [24:48–27:52]
+
+- **Topic Title:** Hybrid score computation and current retrieval quality
+  - Topic id: M010-T07
+  - Reference: P307–P366
+  - Summary:
+      - [00:06] Ankit: Shows the query text in the chat and walks through how BM25 operates on the original text versus the summary.
+      - [00:35] Hongye Qian: Confirms that BM25 first extracts tokens like “NTU” and “industry aligned” and searches for them in the given text.
+      - [01:43] Ankit: Reiterates that once a super summary is created, BM25 will now work only at the summary level, where those tokens might not exist.
+      - [03:39] Hongye Qian: Explains that the code returns both vector search results and BM25 results, and a method then combines them into a hybrid score.
+      - [04:36] Ankit: Notes that the hybrid scoring formula follows the article they are referencing, combining normalized vector scores and BM25 scores with an alpha parameter.
+      - [06:16] Ankit: Observes that the vector results are stored as a list of dictionaries and asks how the vector scores are derived from them.
+      - [07:46] Ankit: Concludes that the combination code basically applies the formula from the article and asks Hongye to double-check details.
+      - [08:37] Ankit: Asks how the retrieval quality looks in practice—whether the system is able to retrieve the correct chunks for test queries.
+      - [08:41] Hongye Qian: Replies that the system can find the right chunks, but she feels the “C structure” is problematic because the dataset is too small.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [00:06–08:41]
+
+- **Topic Title:** Alternative retrieval paths and testing with LLM
+  - Topic id: M010-T08
+  - Reference: P367–P423
+  - Summary:
+      - [08:51] Ankit: Confirms that BM25 is being applied at every level of the hierarchy.
+      - [09:15] Hongye Qian: Asks whether a mistake at the metadata embedding level would make the entire pipeline wrong.
+      - [09:32] Ankit: Acknowledges that incorrect metadata could indeed break the downstream retrieval.
+      - [09:43] Hongye Qian: Proposes testing a path that bypasses metadata, using only summary-level and meeting-level embeddings starting from the query.
+      - [10:00] Ankit: Suggests also considering running both paths (with and without metadata) simultaneously.
+      - [10:27] Ankit: Raises the problem that two different paths might yield different top-K lists, making final selection difficult.
+      - [11:23] Ankit: Suggests skipping metadata embedding entirely and directly going from query to summary-level then meeting-level embeddings.
+      - [12:13] Hongye Qian: Rephrases the proposed path as “query → summary → meeting” and agrees to try it.
+      - [13:21] Ankit: Proposes meeting again on Monday and asks about current retrieval results.
+      - [13:40] Hongye Qian: Confirms that the system can retrieve correct answers in her checks.
+      - [13:54] Ankit: States that he can integrate the LLM concept over the weekend and emphasizes the need for extensive testing.
+      - [14:28] Ankit: Adds that he is willing to do a lot of testing.
+      - [14:33] Hongye Qian: Notes that for any RAG system, extensive testing on different data types is necessary to gain confidence.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [08:51–16:48]
+
+- **Topic Title:** Scalability concerns, DFS vs BFS, and graph-embedding idea
+  - Topic id: M010-T09
+  - Reference: P424–P476
+  - Summary:
+      - [16:56] Ankit: Observes that the current structure can select the needed information but may not scale well when there are hundreds or thousands of meetings.
+      - [17:27] Ankit: Explains that a large number of meetings will make the index very complex and increases risk when metadata is wrong, likening the current design to a depth-first search (DFS).
+      - [18:50] Ankit: Suggests designing a more breadth-first-search-like (BFS) strategy to reduce risk, even if it is more computationally expensive.
+      - [19:24] Ankit: Mentions having another design idea but is not yet confident in explaining it clearly.
+      - [19:53] Ankit: Proposes building a “graph embedding” layer that the query visits before going into hierarchical embeddings.
+      - [21:23] Ankit: Explains that the graph can encode relationships between meetings, people, dates, and topic keywords using graph algorithms.
+      - [22:30] Ankit: Describes making each meeting a center node with edges for participants, dates, and keywords, and connecting related meetings, similar to a graph database.
+      - [23:49] Ankit: Suggests that queries could search this graph embedding directly, and an LLM could decide if the graph results are sufficient, potentially reducing overall cost.
+      - [25:12] Ankit: Clarifies that topic keywords in the graph are not simply BM25; the design focuses on traversing graph structure rather than term frequency.
+      - [26:40] Ankit: Summarizes that graph embeddings focus on key attributes (e.g., keywords, dates) while hierarchical embeddings focus on content.
+      - [27:25] Ankit: Notes that the idea is inspired by articles he previously shared with Hongye and suggests also trying a combination of summary-level and meeting-level embeddings.
+      - [29:24] Ankit: Asks Hongye to share her original diagrams in the chat.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [16:56–29:24]
+
+- **Topic Title:** Use of Gemini transcripts and meeting recordings for validation
+  - Topic id: M010-T10
+  - Reference: P479–P503
+  - Summary:
+      - [00:00] Ankit: Mentions using Gemini to obtain transcripts and asks whether everything after transcription is automated or requires manual work.
+      - [00:07] Hongye Qian: Explains that meeting-level summaries are generated by the model but she manually checks whether the information is correct.
+      - [00:30] Ankit: Summarizes the current process as getting a transcript, passing it through a prompt, and then manually verifying the meeting-level and meta-level summaries.
+      - [00:52] Ankit: Confirms that Hongye has fully checked four core datasets.
+      - [00:59] Hongye Qian: States that for additional datasets she only created test questions and checked the answers, without fully validating the summaries.
+      - [01:34] Hongye Qian: Adds that she records meetings, so if she cannot answer a question, she can refer back to the meeting transcripts.
+      - [01:49] Hongye Qian: Confirms that she can also use their own meeting transcripts, which are stored in her folder.
+      - [01:57] Ankit: Encourages her to use their meeting transcripts as test data since both know the content.
+      - [02:32] Ankit: Thanks Hongye for her time and wishes her good luck for an important evening deadline, suggesting they try to meet again on Monday.
+  - Participants: Ankit; Hongye Qian
+  - Duration: [00:00–02:43]
+
+## Action Items
+
+- **Responsible Person:** Hongye Qian
+  - Topic id: M010-A01
+  - Reference: P032–P034
+  - Task: Create a clearer PPT diagram of the retrieval flow, including metadata, summary, and meeting-level steps.
+  - Context: Ankit requested a visual flow in PPT to better understand the hybrid retrieval process, and Hongye agreed to draw it.
+  - Duration: [06:31–06:57]
+  - Deadline (if any): TBD
+
+- **Responsible Person:** Ankit
+  - Topic id: M010-A02
+  - Reference: P404–P407
+  - Task: Integrate the LLM component into the retrieval pipeline and conduct additional testing.
+  - Context: Ankit stated he can add the LLM concept over the weekend and emphasized he can do a lot of testing on the system.
+  - Duration: [13:54–14:28]
+  - Deadline (if any): TBD
+
+- **Responsible Person:** Ankit; Hongye Qian
+  - Topic id: M010-A03
+  - Reference: P479–P503
+  - Task: Use their own meeting transcripts as part of the test data and hold a follow-up meeting on Monday to review progress.
+  - Context: They discussed using recorded meeting transcripts to validate summaries and retrieval behaviour, and Ankit suggested meeting again on Monday after Hongye’s evening deadline.
+  - Duration: [00:00–02:43]
+  - Deadline (if any): TBD

@@ -6,7 +6,6 @@
   "language": "en",
   "source_url": "https://www.youtube.com/watch?v=7zC8-06198g",
   "meeting_type": "Interview",
-
   "participants": [
     {
       "name": "Shou Chew",
@@ -26,13 +25,11 @@
       ]
     }
   ],
-
   "organizations": [
     "TikTok",
     "TED",
     "ByteDance"
   ],
-
   "topics": [
     "Discovery-First Design vs. Social Graph",
     "Recommendation Mechanics & Early Growth Fairness",
@@ -43,7 +40,6 @@
     "Harmful Trends, Sexualized Content & Moderation at Scale",
     "Data Security, ByteDance Links & Project Texas"
   ],
-
   "keywords": [
     "TikTok",
     "Shou Chew",
@@ -54,19 +50,17 @@
     "Content Moderation",
     "ByteDance"
   ],
-
   "related_files": {
     "transcript": "data007.md",
     "meeting_summary": "meetLevel007.md",
     "summary_embedding": "summary007.md"
   },
-
   "embedding_text_pointer": "summary007.md",
-
   "summary_brief": "At TED2023, TikTok CEO Shou Chew discussed the platform's interest-based algorithm, content moderation policies, and addressed U.S. national security concerns over data and China by detailing 'Project Texas'.",
-
   "actions": [
     {
+      "action_id": "M007-A01",
+      "task": "Continue rollout and third-party oversight of Project Texas for U.S. data localization and access controls.",
       "assignee": {
         "name": "Shou Chew",
         "role": "CEO, TikTok",
@@ -82,15 +76,27 @@
       "priority": "high"
     },
     {
+      "action_id": "M007-A02",
+      "task": "Maintain and expand teen safety measures (default limits, restricted features, content filters) and safety prompts; continue \"Stop, Think, Decide Before You Act\" and search-redirect safety flows.",
       "assignee": {
-        "name": "Chris Anderson",
-        "role": "Head of TED",
-        "aliases": [
-          "Chris",
-          "C. Anderson"
-        ]
+        "name": "Trust & Safety / Policy Team",
+        "role": "Trust & Safety / Policy",
+        "aliases": []
       },
-      "description_plain": "Host follow-up public conversations on digital wellness, screen time, and youth protections across social media platforms.",
+      "description_plain": "Operate and improve teen safety systems, including default screen-time limits, restricted features, content filters and in-app safety education flows.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "medium"
+    },
+    {
+      "action_id": "M007-A03",
+      "task": "Promote Family Pairing guidance and screen-time education resources in-app and via partners (e.g., Digital Wellness Lab).",
+      "assignee": {
+        "name": "Parenting & Education Partnerships",
+        "role": "Partnerships & Education",
+        "aliases": []
+      },
+      "description_plain": "Collaborate with external partners and parents to promote Family Pairing and healthy screen-time education resources.",
       "due_date": "TBD",
       "status": "open",
       "priority": "medium"

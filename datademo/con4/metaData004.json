@@ -56,6 +56,8 @@
 
   "actions": [
     {
+      "action_id": "M004-A01",
+      "task": "Continue promoting The Voice Layer Theory as a structured coaching framework.",
       "assignee": {
         "name": "Nimi Mehta",
         "role": "CEO, Speaker by Nimi Mehta",
@@ -67,6 +69,8 @@
       "priority": "medium"
     },
     {
+      "action_id": "M004-A02",
+      "task": "Apply “choose your discomfort” mindset in future episodes; develop reflection prompts for listeners.",
       "assignee": {
         "name": "Host",
         "role": "Host, The Balance Theory Podcast",

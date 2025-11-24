@@ -1,0 +1,1529 @@
+====================================================================================================
+TIMESTAMPS DEBUG REPORT
+Generated: 2025-11-11 12:27:36
+====================================================================================================
+
+
+====================================================================================================
+LEVEL: METADATA
+====================================================================================================
+
+>>> MEETING: data001 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #1]
+Chunk ID: data001_metadata
+Level: metadata
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: []
+  - 数量: 0
+
+--- 对比分析 ---
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data004 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #2]
+Chunk ID: data004_metadata
+Level: metadata
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: []
+  - 数量: 0
+
+--- 对比分析 ---
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data006 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #3]
+Chunk ID: data006_metadata
+Level: metadata
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: []
+  - 数量: 0
+
+--- 对比分析 ---
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data007 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #4]
+Chunk ID: data007_metadata
+Level: metadata
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: []
+  - 数量: 0
+
+--- 对比分析 ---
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+====================================================================================================
+LEVEL: SUMMARY
+====================================================================================================
+
+>>> MEETING: data001 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #1]
+Chunk ID: data001_summary_0
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Summary Index: 1
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: []
+  - 数量: 0
+
+--- 对比分析 ---
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #2]
+Chunk ID: data001_summary_1
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 00:00:00–06:35:00
+Timestamps (当前 chunk): [00:00:00, 00:00:27, 00:00:43]
+  - 数量: 3
+Is Split: True
+Split Part: 1/3
+Total Parts: 3
+Summary Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:00:00, 00:00:27, 00:00:43]
+  - 数量: 3
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #3]
+Chunk ID: data001_summary_2
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 00:00:00–06:35:00
+Timestamps (当前 chunk): [00:00:43, 00:01:17, 00:02:15, 00:03:10, 00:04:18]
+  - 数量: 5
+Is Split: True
+Split Part: 2/3
+Total Parts: 3
+Summary Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:00:43, 00:01:17, 00:02:15, 00:03:10, 00:04:18]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #4]
+Chunk ID: data001_summary_3
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 00:00:00–06:35:00
+Timestamps (当前 chunk): [00:04:18, 00:05:10, 00:06:00, 00:06:28]
+  - 数量: 4
+Is Split: True
+Split Part: 3/3
+Total Parts: 3
+Summary Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:04:18, 00:05:10, 00:06:00, 00:06:28]
+  - 数量: 4
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data004 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #5]
+Chunk ID: data004_summary_0
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Summary Index: 1
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: []
+  - 数量: 0
+
+--- 对比分析 ---
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #6]
+Chunk ID: data004_summary_1
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 00:00–09:25
+Timestamps (当前 chunk): [00:44, 01:17, 03:18, 03:43, 05:49, 09:25]
+  - 数量: 6
+Is Split: False
+Summary Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:44, 01:17, 03:18, 03:43, 05:49, 09:25]
+  - 数量: 6
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #7]
+Chunk ID: data004_summary_2
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 10:45–20:21
+Timestamps (当前 chunk): [11:06, 15:00, 16:18, 17:41, 19:35, 20:21]
+  - 数量: 6
+Is Split: False
+Summary Index: 3
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [11:06, 11:06, 15:00, 16:18, 17:41, 19:35, 20:21]
+  - 数量: 7
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #8]
+Chunk ID: data004_summary_3
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 21:30–32:00
+Timestamps (当前 chunk): [21:30, 28:53, 32:00]
+  - 数量: 3
+Is Split: False
+Summary Index: 4
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [21:30, 21:30, 28:53, 32:00]
+  - 数量: 4
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #9]
+Chunk ID: data004_summary_4
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 33:57–50:47
+Timestamps (当前 chunk): [35:04, 39:42, 42:22, 45:22, 47:49, 49:27, 50:35]
+  - 数量: 7
+Is Split: False
+Summary Index: 5
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [35:04, 39:42, 42:22, 45:22, 47:49, 49:27, 50:35]
+  - 数量: 7
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data006 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #10]
+Chunk ID: data006_summary_0
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Summary Index: 1
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: []
+  - 数量: 0
+
+--- 对比分析 ---
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #11]
+Chunk ID: data006_summary_1
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 00:00–09:25
+Timestamps (当前 chunk): [00:09, 04:16, 05:38, 06:29, 08:24]
+  - 数量: 5
+Is Split: True
+Split Part: 1/2
+Total Parts: 2
+Summary Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:09, 04:16, 05:38, 06:29, 08:24]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #12]
+Chunk ID: data006_summary_2
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 00:00–09:25
+Timestamps (当前 chunk): [08:24, 08:46, 09:25]
+  - 数量: 3
+Is Split: True
+Split Part: 2/2
+Total Parts: 2
+Summary Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [08:24, 08:46, 09:25]
+  - 数量: 3
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #13]
+Chunk ID: data006_summary_3
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 11:03–22:47
+Timestamps (当前 chunk): [12:06, 15:43, 16:49, 19:49]
+  - 数量: 4
+Is Split: True
+Split Part: 1/2
+Total Parts: 2
+Summary Index: 3
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [12:06, 12:06, 15:43, 16:49, 19:49]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #14]
+Chunk ID: data006_summary_4
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 11:03–22:47
+Timestamps (当前 chunk): [19:49, 22:47]
+  - 数量: 2
+Is Split: True
+Split Part: 2/2
+Total Parts: 2
+Summary Index: 3
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [19:49, 22:47]
+  - 数量: 2
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #15]
+Chunk ID: data006_summary_5
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 23:06–32:00
+Timestamps (当前 chunk): [23:06, 25:26, 26:11, 29:41, 30:20, 32:00]
+  - 数量: 6
+Is Split: True
+Split Part: 1/2
+Total Parts: 2
+Summary Index: 4
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [23:06, 25:26, 26:11, 29:41, 30:20, 32:00]
+  - 数量: 6
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #16]
+Chunk ID: data006_summary_6
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 23:06–32:00
+Timestamps (当前 chunk): [32:00]
+  - 数量: 1
+Is Split: True
+Split Part: 2/2
+Total Parts: 2
+Summary Index: 4
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [32:00]
+  - 数量: 1
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #17]
+Chunk ID: data006_summary_7
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 32:04–44:13
+Timestamps (当前 chunk): [32:26, 35:47, 39:31, 42:58, 44:13]
+  - 数量: 5
+Is Split: True
+Split Part: 1/2
+Total Parts: 2
+Summary Index: 5
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [32:26, 35:47, 39:31, 42:58, 44:13]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #18]
+Chunk ID: data006_summary_8
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 32:04–44:13
+Timestamps (当前 chunk): [44:13]
+  - 数量: 1
+Is Split: True
+Split Part: 2/2
+Total Parts: 2
+Summary Index: 5
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [44:13]
+  - 数量: 1
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #19]
+Chunk ID: data006_summary_9
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 44:36–01:02:51
+Timestamps (当前 chunk): [44:36, 47:47, 52:28, 55:46, 59:39]
+  - 数量: 5
+Is Split: True
+Split Part: 1/2
+Total Parts: 2
+Summary Index: 6
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [44:36, 47:47, 52:28, 55:46, 59:39]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #20]
+Chunk ID: data006_summary_10
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 44:36–01:02:51
+Timestamps (当前 chunk): [59:39, 01:00:15, 01:02:51]
+  - 数量: 3
+Is Split: True
+Split Part: 2/2
+Total Parts: 2
+Summary Index: 6
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [59:39, 01:00:15, 01:02:51]
+  - 数量: 3
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data007 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #21]
+Chunk ID: data007_summary_0
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Summary Index: 1
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: []
+  - 数量: 0
+
+--- 对比分析 ---
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #22]
+Chunk ID: data007_summary_1
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 00:36–09:23
+Timestamps (当前 chunk): [00:36, 02:49, 04:13, 08:20, 09:12]
+  - 数量: 5
+Is Split: False
+Summary Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:36, 02:49, 04:13, 08:20, 09:12]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #23]
+Chunk ID: data007_summary_2
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 05:54–13:05
+Timestamps (当前 chunk): [05:54, 06:41, 07:27, 11:57, 12:24]
+  - 数量: 5
+Is Split: False
+Summary Index: 3
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [05:54, 06:41, 07:27, 11:57, 12:24]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #24]
+Chunk ID: data007_summary_3
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 15:40–24:56
+Timestamps (当前 chunk): [15:40, 16:09, 20:37, 22:01, 23:53, 24:07]
+  - 数量: 6
+Is Split: False
+Summary Index: 4
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [15:40, 16:09, 20:37, 22:01, 23:53, 24:07]
+  - 数量: 6
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #25]
+Chunk ID: data007_summary_4
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 25:22–29:22
+Timestamps (当前 chunk): [25:22, 26:34, 27:26, 28:38, 29:22]
+  - 数量: 5
+Is Split: False
+Summary Index: 5
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [25:22, 26:34, 27:26, 28:38, 29:22]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #26]
+Chunk ID: data007_summary_5
+Level: summary
+
+--- Metadata 信息 ---
+Duration: 29:25–32:11
+Timestamps (当前 chunk): [29:25, 30:12, 31:01, 31:29, 32:04]
+  - 数量: 5
+Is Split: False
+Summary Index: 6
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [29:25, 30:12, 31:01, 31:29, 32:04]
+  - 数量: 5
+
+--- 对比分析 ---
+✓ Metadata 中的 timestamps 与 Text 中的完全匹配
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+====================================================================================================
+LEVEL: MEETING
+====================================================================================================
+
+>>> MEETING: data001 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #1]
+Chunk ID: data001_meeting_0
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Early Computing and Programming Background
+Topic Index: 0
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:00, 00:27]
+  - 数量: 2
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [00:00, 00:27]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #2]
+Chunk ID: data001_meeting_1
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Grok Model Vision and Philosophy
+Topic Index: 1
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:43, 01:17, 01:50, 02:15, 02:45]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [02:15, 01:17, 02:45, 01:50, 00:43]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #3]
+Chunk ID: data001_meeting_2
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Grounding AI in Physical Reality
+Topic Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [03:10, 04:18, 04:45, 05:10, 05:40]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [03:10, 05:40, 05:10, 04:45, 04:18]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #4]
+Chunk ID: data001_meeting_3
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Developer Collaboration and Future Outlook
+Topic Index: 3
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [06:00, 06:28]
+  - 数量: 2
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [06:00, 06:28]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data004 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #5]
+Chunk ID: data004_meeting_0
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Early Career and First Setback (MTV Experience) [#M004-T01 R=P003–P010]
+Topic Index: 0
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:44, 01:17, 03:18, 03:43, 04:53]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [00:44, 03:18, 04:53, 03:43, 01:17]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #6]
+Chunk ID: data004_meeting_1
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Persistence and Career Rebuilding [#M004-T02 R=P011–P013]
+Topic Index: 1
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [05:39, 05:49, 05:49, 05:49, 05:49, 09:25]
+  - 数量: 6
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [05:39, 09:25, 05:49]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #7]
+Chunk ID: data004_meeting_2
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Transition to Entrepreneurship and Choosing Fear [#M004-T03 R=P014–P016]
+Topic Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [10:45, 11:06, 11:06, 11:06, 11:06, 15:00]
+  - 数量: 6
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [10:45, 15:00, 11:06]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #8]
+Chunk ID: data004_meeting_3
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Intuition, Body Awareness, and Decision-Making [#M004-T04 R=P017–P020]
+Topic Index: 3
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [16:18, 17:41, 19:35, 20:21]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [16:18, 17:41, 20:21, 19:35]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #9]
+Chunk ID: data004_meeting_4
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Finding and Protecting One’s Voice [#M004-T05 R=P021–P025]
+Topic Index: 4
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [21:30, 21:30, 21:30, 21:30, 28:53, 32:00]
+  - 数量: 6
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [21:30, 28:53, 32:00]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #10]
+Chunk ID: data004_meeting_5
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Balancing Kindness and Assertiveness [#M004-T06 R=P026–P029]
+Topic Index: 5
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [33:57, 35:04, 35:04, 35:04, 39:42, 42:22]
+  - 数量: 6
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [39:42, 35:04, 33:57, 42:22]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #11]
+Chunk ID: data004_meeting_6
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Confidence, Reflection, and Emotional Awareness [#M004-T07 R=P030–P034]
+Topic Index: 6
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [44:18, 45:22, 47:49, 49:27, 50:35]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [47:49, 45:22, 44:18, 50:35, 49:27]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data006 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #12]
+Chunk ID: data006_meeting_0
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Reinventing Computing and the Origins of Nvidia [#M006-T01 R=P001–P016]
+Topic Index: 0
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:00, 00:27, 03:45, 04:16, 05:38]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [00:00, 05:38, 00:27, 03:45, 04:16]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #13]
+Chunk ID: data006_meeting_1
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: The GPU as a “Time Machine” and the Birth of CUDA [#M006-T02 R=P017–P026]
+Topic Index: 1
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [06:24, 06:29, 08:24, 08:46]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [08:24, 06:24, 08:46, 06:29]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #14]
+Chunk ID: data006_meeting_2
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: AlexNet 2012 — Deep Learning’s Breakthrough Moment [#M006-T03 R=P027–P030]
+Topic Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [11:03, 12:06, 12:06, 15:43]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [15:43, 11:03, 12:06]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #15]
+Chunk ID: data006_meeting_3
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Ten Years of Belief — Patience, Principles, and Core Convictions [#M006-T04 R=P031–P035]
+Topic Index: 3
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [16:49, 16:49, 19:49, 19:49]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [16:49, 19:49]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #16]
+Chunk ID: data006_meeting_4
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: From Science of AI to Application Science — AI’s Next Decade [#M006-T05 R=P036–P038]
+Topic Index: 4
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [23:06, 23:06, 24:04]
+  - 数量: 3
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [23:06, 24:04]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #17]
+Chunk ID: data006_meeting_5
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Omniverse + Cosmos — Building the World Model for Robotics [#M006-T06 R=P039–P045]
+Topic Index: 5
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [25:26, 26:11, 26:11, 29:41, 30:20]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [25:26, 30:20, 26:11, 29:41]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #18]
+Chunk ID: data006_meeting_6
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: AI Risks and Safety Engineering [#M006-T07 R=P046–P051]
+Topic Index: 6
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [32:04, 32:26, 32:26, 32:26]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [32:04, 32:26]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #19]
+Chunk ID: data006_meeting_7
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Energy Efficiency and Hardware Evolution [#M006-T08 R=P052–P057]
+Topic Index: 7
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [35:10, 35:47, 36:40, 37:07]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [35:10, 37:07, 35:47, 36:40]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #20]
+Chunk ID: data006_meeting_8
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Betting on Flexibility — Beyond Transformers [#M006-T09 R=P058–P059]
+Topic Index: 8
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [38:03, 39:31, 39:31, 39:31]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [39:31, 38:03]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #21]
+Chunk ID: data006_meeting_9
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Pushing Physical Limits and Cross-Disciplinary Engineering [#M006-T10 R=P060–P061]
+Topic Index: 9
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [42:29, 42:58, 42:58]
+  - 数量: 3
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [42:29, 42:58]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #22]
+Chunk ID: data006_meeting_10
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Future Bets — Fusion of Omniverse and Cosmos, Digital Biology and Climate Science [#M006-T11 R=P062–P063]
+Topic Index: 10
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [44:36, 44:36, 44:36]
+  - 数量: 3
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [44:36]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #23]
+Chunk ID: data006_meeting_11
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Preparing for a Superhuman AI Future [#M006-T12 R=P064–P073]
+Topic Index: 11
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [47:47, 47:47, 55:46, 57:55]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [47:47, 55:46, 57:55]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #24]
+Chunk ID: data006_meeting_12
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Legacy and Impact — Looking Back at Nvidia’s Mission [#M006-T13 R=P074–P079]
+Topic Index: 12
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [59:09, 01:00:15, 01:00:15, 01:00:15]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [59:09, 01:00:15]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+>>> MEETING: data007 <<<
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CHUNK #25]
+Chunk ID: data007_meeting_0
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Discovery-First Design vs. Social Graph [#M007-T01 R=P004–P013]
+Topic Index: 0
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [00:36, 02:49, 04:13, 08:20, 09:12]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [02:49, 08:20, 00:36, 04:13, 09:12]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #26]
+Chunk ID: data007_meeting_1
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Recommendation Mechanics & Early Growth Fairness [#M007-T02 R=P007–P018]
+Topic Index: 1
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [05:54, 06:41, 07:27, 11:57, 12:24]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [11:57, 06:41, 07:27, 05:54, 12:24]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #27]
+Chunk ID: data007_meeting_2
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Platform DNA vs. Competitors & Filter Bubbles [#M007-T03 R=P019–P021]
+Topic Index: 2
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [13:28, 14:25, 14:46]
+  - 数量: 3
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [14:46, 14:25, 13:28]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #28]
+Chunk ID: data007_meeting_3
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Community Guidelines & Youth Protections [#M007-T04 R=P024–P026]
+Topic Index: 3
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [15:40, 16:09, 16:34]
+  - 数量: 3
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [15:40, 16:34, 16:09]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #29]
+Chunk ID: data007_meeting_4
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Screen Time, Addiction Risk & Digital Wellness [#M007-T05 R=P029–P036]
+Topic Index: 4
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [19:12, 20:37, 21:11, 22:01, 23:23]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [23:23, 20:37, 19:12, 21:11, 22:01]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #30]
+Chunk ID: data007_meeting_5
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: U.S. vs. China Youth Experience — Clarification [#M007-T06 R=P037–P038]
+Topic Index: 5
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [23:53, 24:07]
+  - 数量: 2
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [24:07, 23:53]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #31]
+Chunk ID: data007_meeting_6
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Harmful Trends, Sexualized Content & Moderation at Scale [#M007-T07 R=P039–P044]
+Topic Index: 6
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [25:22, 26:34, 27:26, 28:38]
+  - 数量: 4
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [28:38, 26:34, 25:22, 27:26]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+[CHUNK #32]
+Chunk ID: data007_meeting_7
+Level: meeting
+
+--- Metadata 信息 ---
+Duration: N/A
+Timestamps (当前 chunk): []
+  - 数量: 0
+Is Split: False
+Topic Title: Data Security, ByteDance Links & Project Texas [#M007-T08 R=P029–P032]
+Topic Index: 7
+
+--- Chunk Text 中的时间戳 ---
+Text 中的时间戳: [29:25, 30:12, 31:01, 31:29, 32:04]
+  - 数量: 5
+
+--- 对比分析 ---
+⚠ Metadata 中的 timestamps 与 Text 中的不完全匹配
+  仅在 Text 中: [30:12, 32:04, 31:01, 29:25, 31:29]
+
+--- Duration 分析 ---
+
+----------------------------------------------------------------------------------------------------
+
+
+====================================================================================================
+END OF REPORT
+====================================================================================================

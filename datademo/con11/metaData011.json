@@ -1,0 +1,80 @@
+{
+  "meeting_id": "data011",
+  "title": "Discussion on Elastic Search Implementation with Ankit and Hongye Qian",
+  "datetime": null,
+  "duration_sec": 0,
+  "language": "en",
+  "source_url": null,
+  "meeting_type": "Technical Discussion",
+
+  "participants": [
+    {
+      "name": "Ankit",
+      "role": "Developer",
+      "aliases": []
+    },
+    {
+      "name": "Hongye Qian",
+      "role": "Data Scientist",
+      "aliases": []
+    }
+  ],
+
+  "organizations": [],
+  
+  "topics": [
+    "Elastic Search Configuration",
+    "Dense vs Sparse Factors",
+    "Filter Implementation"
+  ],
+
+  "keywords": [
+    "Elastic Search",
+    "Dense Factors",
+    "Sparse Factors",
+    "Filters",
+    "Metadata",
+    "Search Efficiency",
+    "Vector Search",
+    "KNN Methods"
+  ],
+
+  "related_files": {
+    "transcript": "data011.md",
+    "meeting_summary": "meetLevel011.md",
+    "summary_embedding": "summary011.md"
+  },
+
+  "embedding_text_pointer": "summary011.md",
+
+  "summary_brief": "In this technical discussion, Ankit and Hongye Qian explore the implementation of Elastic Search, focusing on the differences between dense and sparse factors, and the importance of filters for improving search efficiency. They also discuss the challenges faced during testing and the need for further refinement in their approach.",
+
+  "actions": [
+    {
+      "action_id": "M011-A01",
+      "task": "Test Elastic Search with Filters",
+      "assignee": {
+        "name": "Hongye Qian",
+        "role": "Data Scientist",
+        "aliases": []
+      },
+      "description_plain": "Hongye will conduct tests on Elastic Search using filters to improve the accuracy of search results.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "medium"
+    },
+    {
+      "action_id": "M011-A02",
+      "task": "Prepare Real Conversation Data",
+      "assignee": {
+        "name": "Ankit",
+        "role": "Developer",
+        "aliases": []
+      },
+      "description_plain": "Ankit will gather real conversation transcripts to include in the testing data for better model training.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "medium"
+    }
+  ]
+}

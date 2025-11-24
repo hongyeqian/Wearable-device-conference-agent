@@ -1,0 +1,79 @@
+{
+  "meeting_id": "data010",
+  "title": "Discussion on Metadata Embedding with Ankit and Hongye Qian",
+  "datetime": null,
+  "duration_sec": 0,
+  "language": "en",
+  "source_url": null,
+  "meeting_type": "Technical Discussion",
+
+  "participants": [
+    {
+      "name": "Ankit",
+      "role": "Participant",
+      "aliases": []
+    },
+    {
+      "name": "Hongye Qian",
+      "role": "Participant",
+      "aliases": []
+    }
+  ],
+
+  "organizations": [],
+  
+  "topics": [
+    "Metadata Embedding Process",
+    "Reference Number Generation",
+    "Cosine Similarity in Queries"
+  ],
+
+  "keywords": [
+    "Metadata",
+    "Embedding",
+    "Cosine Similarity",
+    "Summary",
+    "Query",
+    "Index",
+    "Action Items"
+  ],
+
+  "related_files": {
+    "transcript": "data010.md",
+    "meeting_summary": "meetLevel010.md",
+    "summary_embedding": "summary010.md"
+  },
+
+  "embedding_text_pointer": "summary010.md",
+
+  "summary_brief": "In this technical discussion, Ankit and Hongye Qian explore the process of metadata embedding, focusing on reference number generation and the use of cosine similarity for queries. They discuss the implications of metadata accuracy on the overall system performance and consider potential improvements for handling larger datasets.",
+
+  "actions": [
+    {
+      "action_id": "M010-A01",
+      "task": "Create a visual flow diagram of the metadata embedding process.",
+      "assignee": {
+        "name": "Hongye Qian",
+        "role": "Participant",
+        "aliases": []
+      },
+      "description_plain": "Hongye Qian will draw a flow diagram to visualize the steps involved in the metadata embedding process, which will help clarify the discussion points.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "medium"
+    },
+    {
+      "action_id": "M010-A02",
+      "task": "Test the integration of LLM in the metadata embedding process.",
+      "assignee": {
+        "name": "Ankit",
+        "role": "Participant",
+        "aliases": []
+      },
+      "description_plain": "Ankit will work on integrating the LLM into the metadata embedding process and conduct tests to evaluate its effectiveness.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "medium"
+    }
+  ]
+}

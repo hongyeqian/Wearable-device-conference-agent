@@ -1,0 +1,80 @@
+{
+  "meeting_id": "data012",
+  "title": "Discussion on RAG and Metadata Summaries with Ankit and Hongye Qian",
+  "datetime": null,
+  "duration_sec": 0,
+  "language": "en",
+  "source_url": null,
+  "meeting_type": "Discussion",
+
+  "participants": [
+    {
+      "name": "Ankit",
+      "role": "Participant",
+      "aliases": []
+    },
+    {
+      "name": "Hongye Qian",
+      "role": "Participant",
+      "aliases": []
+    }
+  ],
+
+  "organizations": [],
+  
+  "topics": [
+    "RAG development",
+    "Metadata summaries",
+    "Clustering methods"
+  ],
+
+  "keywords": [
+    "RAG",
+    "metadata",
+    "summarization",
+    "embedding",
+    "clustering",
+    "unsupervised learning",
+    "indexing",
+    "semantic data"
+  ],
+
+  "related_files": {
+    "transcript": "data012.md",
+    "meeting_summary": "meetLevel012.md",
+    "summary_embedding": "summary012.md"
+  },
+
+  "embedding_text_pointer": "summary012.md",
+
+  "summary_brief": "In this discussion, Ankit and Hongye Qian explore the development of RAG and the nuances of metadata summaries. They address challenges related to summarization, indexing, and the potential use of clustering methods to improve efficiency in handling large datasets.",
+
+  "actions": [
+    {
+      "action_id": "M012-A01",
+      "task": "Explore efficient indexing methods for raw data",
+      "assignee": {
+        "name": "Hongye Qian",
+        "role": "Participant",
+        "aliases": []
+      },
+      "description_plain": "Hongye Qian is tasked with investigating more efficient ways to index raw data to avoid excessive length in indexing.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "medium"
+    },
+    {
+      "action_id": "M012-A02",
+      "task": "Research clustering methods for summarization",
+      "assignee": {
+        "name": "Ankit",
+        "role": "Participant",
+        "aliases": []
+      },
+      "description_plain": "Ankit will look into clustering methods that could help in summarizing data more effectively and reducing the number of indices needed.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "low"
+    }
+  ]
+}

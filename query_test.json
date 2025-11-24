@@ -1,0 +1,92 @@
+[
+  {
+    "id": 1,
+    "query": "What feedback loop did Satya request developers establish for Grok 3.5 during Build 2025?",
+    "expected_answer": "Satya wants Azure developers to collect real usage feedback from Grok 3.5 and feed it back to improve the model.",
+    "sources": ["data001"]
+  },
+  {
+    "id": 2,
+    "query": "According to Elon Musk in the Build fireside chat, what core principles anchor AI safety?",
+    "expected_answer": "He emphasizes pursuit of honesty and grounding AI in real-world constraints to keep it safe.",
+    "sources": ["data001"]
+  },
+  {
+    "id": 3,
+    "query": "Which session explains the Voice Layer Theory, and what problem is it meant to solve?",
+    "expected_answer": "Nimi Mehta’s talk introduces Voice Layer Theory to help people find and protect their authentic voice.",
+    "sources": ["data004"]
+  },
+  {
+    "id": 4,
+    "query": "How does Jensen Huang describe the role of Omniverse plus Cosmos for training embodied robots?",
+    "expected_answer": "They provide the foundational stack where physical AI, digital twins, and robot training converge.",
+    "sources": ["data006"]
+  },
+  {
+    "id": 5,
+    "query": "What follow-up content did Cleo Abram plan after the interview with Jensen Huang?",
+    "expected_answer": "She plans public-facing explainers to demystify parallel computing, CUDA, and world models.",
+    "sources": ["data006"]
+  },
+  {
+    "id": 6,
+    "query": "Which TED interview covers Project Texas, and what is its primary goal?",
+    "expected_answer": "Shou Chew explains Project Texas to localize U.S. user data and tightly control access.",
+    "sources": ["data007"]
+  },
+  {
+    "id": 7,
+    "query": "What default safety measures for teen users did TikTok outline in that TED conversation?",
+    "expected_answer": "Default screen-time limits, restricted features, content filtering, and the 'Stop, Think, Decide' prompts.",
+    "sources": ["data007"]
+  },
+  {
+    "id": 8,
+    "query": "Which conversation mentioned partnering with Saudi Arabia on a 500 MW xAI AI factory, and who leads it?",
+    "expected_answer": "Elon Musk leads the Saudi collaboration on a 500 MW (initially 50 MW) AI compute facility.",
+    "sources": ["data008"]
+  },
+  {
+    "id": 9,
+    "query": "In which architecture discussion was someone tasked with kicking off coding for the second architecture, and who was it?",
+    "expected_answer": "Hongye Qian must start implementing the second architecture while Ankit creates the system diagram.",
+    "sources": ["data013"]
+  },
+  {
+    "id": 10,
+    "query": "Which meetings highlight humanoid or physical AI development, and what are their respective focus points?",
+    "expected_answer": "data006 discusses physical AI and robot futures; data008 discusses humanoid robots and the AI factory build-out.",
+    "sources": ["data006", "data008"]
+  },
+  {
+    "id": 11,
+    "query": "How did Ankit and Hongye plan to handle reference-number generation in the metadata embedding session?",
+    "expected_answer": "They plan to generate and maintain reference numbers to keep metadata indexing accurate.",
+    "sources": ["data010"]
+  },
+  {
+    "id": 12,
+    "query": "In the same metadata embedding meeting, how will the LLM be integrated and tested?",
+    "expected_answer": "Ankit is responsible for integrating the LLM into the embedding flow and verifying the results.",
+    "sources": ["data010"]
+  },
+  {
+    "id": 13,
+    "query": "How did the Elastic Search discussion contrast dense versus sparse factors for filter efficiency?",
+    "expected_answer": "They compared how dense and sparse factors influence scoring weights and filtering strategies.",
+    "sources": ["data011"]
+  },
+  {
+    "id": 14,
+    "query": "Who is responsible for preparing real conversation data for Elastic Search testing?",
+    "expected_answer": "Ankit will gather real conversation transcripts as test data.",
+    "sources": ["data011"]
+  },
+  {
+    "id": 15,
+    "query": "What indexing or clustering ideas were proposed in the RAG plus metadata summaries discussion to avoid long indexes?",
+    "expected_answer": "Hongye explores efficient raw-data indexing while Ankit researches clustering to reduce the number of summaries.",
+    "sources": ["data012"]
+  }
+]
