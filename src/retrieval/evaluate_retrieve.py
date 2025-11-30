@@ -13,6 +13,7 @@ from src.data_loader.loader import DataLoader
 from src.chunking.chunker import HierarchicalChunker
 from src.retrieval.vector_store import HybridSearchVectorStore
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
+from src.retrieval.query_rewriter import QueryRewriter
 from config.settings import DATA_DIR
 
 
@@ -359,12 +360,400 @@ def run_evaluation(
     }
 
 
-if __name__ == "__main__":
+def run_evaluation_summary_only(
+    query_file: str = "query_test.json",
+    top_k_summary: int = 10,
+    suppress_output: bool = True
+):
+    """
+    Run evaluation using only summary level retrieval (query -> summary level -> return results).
+    This is a simplified evaluation path that skips metadata and meeting levels.
+    
+    Args:
+        query_file: Path to JSON file with test queries
+        top_k_summary: Top K for summary level search
+        suppress_output: If True, suppress HierarchicalRetriever's print statements
+    """
+    # Create output directory
+    output_dir = project_root / "output"
+    output_dir.mkdir(exist_ok=True)
+    
+    # Create output file with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = output_dir / f"evaluation_summary_only_{timestamp}.txt"
+    
+    # Use StringIO to collect all output
+    output = StringIO()
+    
+    # Load test queries
+    query_path = project_root / query_file
+    with open(query_path, 'r', encoding='utf-8') as f:
+        test_queries = json.load(f)
+    
+    output.write("=" * 80 + "\n")
+    output.write("SUMMARY-ONLY RETRIEVER EVALUATION\n")
+    output.write("=" * 80 + "\n")
+    
+    # Initialize retriever
+    output.write("\n[Initialization] Setting up vector store...\n")
+    loader = DataLoader(DATA_DIR)
+    meetings = loader.load_all_meetings()
+    output.write(f"Loaded {len(meetings)} meetings\n")
+    
+    chunker = HierarchicalChunker()
+    all_chunks = chunker.chunk_all_levels(meetings, include_chunk_level=False)
+    
+    vector_store = HybridSearchVectorStore()
+    for level in ['metadata', 'summary', 'meeting']:
+        chunks = all_chunks.get(level, [])
+        if chunks:
+            vector_store.add_chunks(
+                chunks=chunks,
+                Level=level,
+                generate_embedding=True
+            )
+            output.write(f"Added {len(chunks)} chunks to {level} level\n")
+    
+    retriever = HierarchicalRetriever(vector_store)
+    output.write("Setup complete!\n")
+    
+    # Suppress output if needed
+    import builtins
+    original_print = builtins.print
+    if suppress_output:
+        def silent_print(*args, **kwargs):
+            # Only suppress prints from hierarchical_retriever
+            if 'Searching' in str(args) or 'Found' in str(args) or 'Extract' in str(args) or 'Entry IDs' in str(args):
+                return
+            original_print(*args, **kwargs)
+        builtins.print = silent_print
+    
     # Run evaluation
-    results = run_evaluation(
+    output.write("\n" + "=" * 80 + "\n")
+    output.write("RUNNING EVALUATION (SUMMARY LEVEL ONLY)\n")
+    output.write("=" * 80 + "\n")
+    
+    all_summary_recalls = []
+    
+    for i, test_case in enumerate(test_queries, 1):
+        query_id = test_case.get('id', i)
+        query = test_case['query']
+        expected_summary_ids = normalize_expected_ids(test_case.get('summary_index', []))
+        
+        output.write(f"\n{'='*80}\n")
+        output.write(f"[Query {query_id}] {query}\n")
+        output.write(f"{'='*80}\n")
+        
+        # Perform search using summary-only method
+        try:
+            results = retriever.search_summary_only(
+                query=query,
+                top_k_summary=top_k_summary
+            )
+            
+            # Format results
+            output.write("\n" + "-" * 80 + "\n")
+            output.write("RETRIEVAL RESULTS (SUMMARY LEVEL ONLY)\n")
+            output.write("-" * 80 + "\n")
+            
+            # Summary Level
+            retrieved_summary_ids, _ = format_summary_level_results(results.summary_results, output)
+            
+            # Calculate recall (only for summary level)
+            summary_recall = calculate_recall(retrieved_summary_ids, expected_summary_ids)
+            all_summary_recalls.append(summary_recall)
+            
+            # Format recall evaluation
+            output.write("\n" + "-" * 80 + "\n")
+            output.write("RECALL EVALUATION\n")
+            output.write("-" * 80 + "\n")
+            
+            output.write(f"\n  Summary Level Recall:\n")
+            output.write(f"    Expected Summary IDs: {sorted(expected_summary_ids) if expected_summary_ids else 'None'}\n")
+            output.write(f"    Retrieved Summary IDs: {sorted(retrieved_summary_ids) if retrieved_summary_ids else 'None'}\n")
+            intersection_summary = retrieved_summary_ids & expected_summary_ids
+            output.write(f"    Intersection: {sorted(intersection_summary) if intersection_summary else 'None'}\n")
+            output.write(f"    Recall: {summary_recall:.3f} ({len(intersection_summary)}/{len(expected_summary_ids)})\n")
+            
+        except Exception as e:
+            output.write(f"  Error: {e}\n")
+            import traceback
+            output.write(traceback.format_exc())
+            all_summary_recalls.append(0.0)
+    
+    # Restore print
+    if suppress_output:
+        builtins.print = original_print
+    
+    # Format summary statistics
+    output.write("\n" + "=" * 80 + "\n")
+    output.write("EVALUATION SUMMARY\n")
+    output.write("=" * 80 + "\n")
+    
+    avg_summary_recall = sum(all_summary_recalls) / len(all_summary_recalls) if all_summary_recalls else 0.0
+    
+    output.write(f"\nSummary Level Recall:\n")
+    output.write(f"  Average: {avg_summary_recall:.3f}\n")
+    output.write(f"  Min: {min(all_summary_recalls):.3f}\n")
+    output.write(f"  Max: {max(all_summary_recalls):.3f}\n")
+    
+    output.write("\n" + "=" * 80 + "\n")
+    
+    # Write to file
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(output.getvalue())
+    
+    # Print only summary to console
+    print("\n" + "=" * 80)
+    print("EVALUATION COMPLETE (SUMMARY-ONLY)")
+    print("=" * 80)
+    print(f"\nResults saved to: {output_file}")
+    print(f"\nSummary Statistics:")
+    print(f"  Summary Level Recall - Average: {avg_summary_recall:.3f}")
+    print("=" * 80 + "\n")
+    
+    return {
+        'summary_recalls': all_summary_recalls,
+        'avg_summary_recall': avg_summary_recall,
+        'output_file': str(output_file)
+    }
+
+
+def run_evaluation_with_rewriter(
+    query_file: str = "query_test.json",
+    top_k_vector: int = 5,
+    top_k_bm25: int = 20,
+    num_paraphrases: int = 2,
+    level: str = 'summary',
+    suppress_output: bool = True
+):
+    """
+    Run evaluation using query rewriter with multi-query strategy.
+    
+    Args:
+        query_file: Path to JSON file with test queries
+        top_k_vector: Top k for each vector query (default: 5)
+        top_k_bm25: Top k for BM25 keyword query (default: 20)
+        num_paraphrases: Number of paraphrases to use (default: 2)
+        level: Level to search ('metadata', 'summary', 'meeting')
+        suppress_output: If True, suppress print statements
+    """
+    # Create output directory
+    output_dir = project_root / "output"
+    output_dir.mkdir(exist_ok=True)
+    
+    # Create output file with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = output_dir / f"evaluation_with_rewriter_{timestamp}.txt"
+    
+    # Use StringIO to collect all output
+    output = StringIO()
+    
+    # Load test queries
+    query_path = project_root / query_file
+    with open(query_path, 'r', encoding='utf-8') as f:
+        test_queries = json.load(f)
+    
+    output.write("=" * 80 + "\n")
+    output.write("MULTI-QUERY RETRIEVER EVALUATION (WITH QUERY REWRITER)\n")
+    output.write("=" * 80 + "\n")
+    
+    # Initialize retriever
+    output.write("\n[Initialization] Setting up vector store...\n")
+    loader = DataLoader(DATA_DIR)
+    meetings = loader.load_all_meetings()
+    output.write(f"Loaded {len(meetings)} meetings\n")
+    
+    chunker = HierarchicalChunker()
+    all_chunks = chunker.chunk_all_levels(meetings, include_chunk_level=False)
+    
+    vector_store = HybridSearchVectorStore()
+    for level_name in ['metadata', 'summary', 'meeting']:
+        chunks = all_chunks.get(level_name, [])
+        if chunks:
+            vector_store.add_chunks(
+                chunks=chunks,
+                Level=level_name,
+                generate_embedding=True
+            )
+            output.write(f"Added {len(chunks)} chunks to {level_name} level\n")
+    
+    retriever = HierarchicalRetriever(vector_store)
+    
+    # Initialize query rewriter
+    output.write("\n[Initialization] Setting up query rewriter...\n")
+    query_rewriter = QueryRewriter()
+    output.write("Setup complete!\n")
+    
+    # Suppress output if needed
+    import builtins
+    original_print = builtins.print
+    if suppress_output:
+        def silent_print(*args, **kwargs):
+            # Only suppress prints from hierarchical_retriever and vector_store
+            msg = str(args)
+            if any(keyword in msg for keyword in ['Searching', 'Found', 'Extract', 'Entry IDs', 'Vector multi-query', 'BM25 keyword query', 'Vector search', 'BM25 search', 'Merged results']):
+                return
+            original_print(*args, **kwargs)
+        builtins.print = silent_print
+    
+    # Run evaluation
+    output.write("\n" + "=" * 80 + "\n")
+    output.write(f"RUNNING EVALUATION (MULTI-QUERY, LEVEL: {level.upper()})\n")
+    output.write("=" * 80 + "\n")
+    
+    all_summary_recalls = []
+    
+    for i, test_case in enumerate(test_queries, 1):
+        query_id = test_case.get('id', i)
+        original_query = test_case['query']
+        expected_summary_ids = normalize_expected_ids(test_case.get('summary_index', []))
+        
+        output.write(f"\n{'='*80}\n")
+        output.write(f"[Query {query_id}] {original_query}\n")
+        output.write(f"{'='*80}\n")
+        
+        # Perform search using query rewriter + multi-query
+        try:
+            # Step 1: Rewrite query
+            output.write("\n[Query Rewriting]\n")
+            query_rewrite = query_rewriter.rewrite(original_query)
+            
+            output.write(f"  Normalized Query: {query_rewrite.get('normalized_query', 'N/A')}\n")
+            output.write(f"  Main Clause: {query_rewrite.get('main_clause', 'N/A')}\n")
+            
+            entities = query_rewrite.get('entities', {})
+            people = entities.get('people', [])
+            keywords = entities.get('keywords', [])
+            output.write(f"  Entities - People: {people}\n")
+            output.write(f"  Entities - Keywords: {keywords}\n")
+            
+            paraphrases = query_rewrite.get('paraphrases', [])
+            if paraphrases:
+                output.write(f"  Paraphrases ({len(paraphrases)}):\n")
+                for j, p in enumerate(paraphrases, 1):
+                    output.write(f"    {j}. {p}\n")
+            
+            # Step 2: Multi-query search
+            output.write(f"\n[Multi-Query Retrieval] (level={level}, top_k_vector={top_k_vector}, top_k_bm25={top_k_bm25})\n")
+            results = retriever.search_with_rewriter(
+                original_query=original_query,
+                query_rewrite=query_rewrite,
+                level=level,
+                top_k_vector=top_k_vector,
+                top_k_bm25=top_k_bm25,
+                num_paraphrases=num_paraphrases
+            )
+            
+            # Format results
+            output.write("\n" + "-" * 80 + "\n")
+            output.write(f"RETRIEVAL RESULTS ({level.upper()} LEVEL)\n")
+            output.write("-" * 80 + "\n")
+            output.write(f"Total chunks retrieved: {len(results)}\n")
+            
+            if not results:
+                output.write("  No results found\n")
+                all_summary_recalls.append(0.0)
+                continue
+            
+            # Extract summary_ids from results
+            retrieved_summary_ids = set()
+            for j, result in enumerate(results, 1):
+                chunk_id = result.get('chunk_id', 'N/A')
+                score_vector_norm = result.get('score_vector_norm', 0.0)  # 使用归一化分数
+                score_bm25_norm = result.get('score_bm25_norm', 0.0)  # 使用归一化分数
+                hybrid_score = result.get('hybrid_score', 0.0)
+                
+                metadata = result.get('metadata', {})
+                summary_ids_list = metadata.get('summary_ids', [])
+                if isinstance(summary_ids_list, str):
+                    summary_ids_list = [summary_ids_list] if summary_ids_list else []
+                elif not isinstance(summary_ids_list, list):
+                    summary_ids_list = []
+                
+                retrieved_summary_ids.update(summary_ids_list)
+                
+                output.write(f"\n  [{j}] Chunk ID: {chunk_id}\n")
+                output.write(f"      Score Vector (norm): {score_vector_norm:.4f}\n")
+                output.write(f"      Score BM25 (norm): {score_bm25_norm:.4f}\n")
+                output.write(f"      Hybrid Score: {hybrid_score:.4f}\n")
+                if summary_ids_list:
+                    output.write(f"      Summary IDs: {sorted(summary_ids_list)}\n")
+            
+            # Calculate recall (only for summary level)
+            summary_recall = calculate_recall(retrieved_summary_ids, expected_summary_ids)
+            all_summary_recalls.append(summary_recall)
+            
+            # Format recall evaluation
+            output.write("\n" + "-" * 80 + "\n")
+            output.write("RECALL EVALUATION\n")
+            output.write("-" * 80 + "\n")
+            
+            output.write(f"\n  Summary Level Recall:\n")
+            output.write(f"    Expected Summary IDs: {sorted(expected_summary_ids) if expected_summary_ids else 'None'}\n")
+            output.write(f"    Retrieved Summary IDs: {sorted(retrieved_summary_ids) if retrieved_summary_ids else 'None'}\n")
+            intersection_summary = retrieved_summary_ids & expected_summary_ids
+            output.write(f"    Intersection: {sorted(intersection_summary) if intersection_summary else 'None'}\n")
+            output.write(f"    Recall: {summary_recall:.3f} ({len(intersection_summary)}/{len(expected_summary_ids)})\n")
+            
+        except Exception as e:
+            output.write(f"  Error: {e}\n")
+            import traceback
+            output.write(traceback.format_exc())
+            all_summary_recalls.append(0.0)
+    
+    # Restore print
+    if suppress_output:
+        builtins.print = original_print
+    
+    # Format summary statistics
+    output.write("\n" + "=" * 80 + "\n")
+    output.write("EVALUATION SUMMARY\n")
+    output.write("=" * 80 + "\n")
+    
+    avg_summary_recall = sum(all_summary_recalls) / len(all_summary_recalls) if all_summary_recalls else 0.0
+    
+    output.write(f"\nSummary Level Recall:\n")
+    output.write(f"  Average: {avg_summary_recall:.3f}\n")
+    output.write(f"  Min: {min(all_summary_recalls):.3f}\n")
+    output.write(f"  Max: {max(all_summary_recalls):.3f}\n")
+    
+    output.write("\n" + "=" * 80 + "\n")
+    
+    # Write to file
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(output.getvalue())
+    
+    # Print only summary to console
+    print("\n" + "=" * 80)
+    print("EVALUATION COMPLETE (MULTI-QUERY WITH REWRITER)")
+    print("=" * 80)
+    print(f"\nResults saved to: {output_file}")
+    print(f"\nSummary Statistics:")
+    print(f"  Summary Level Recall - Average: {avg_summary_recall:.3f}")
+    print(f"  Configuration: level={level}, top_k_vector={top_k_vector}, top_k_bm25={top_k_bm25}")
+    print("=" * 80 + "\n")
+    
+    return {
+        'summary_recalls': all_summary_recalls,
+        'avg_summary_recall': avg_summary_recall,
+        'output_file': str(output_file)
+    }
+
+if __name__ == "__main__":
+    # Option 1: Original summary-only evaluation
+    # results = run_evaluation_summary_only(
+    #     query_file="query_test.json",
+    #     top_k_summary=10,
+    #     suppress_output=True
+    # )
+    
+    # Option 2: Multi-query evaluation with query rewriter
+    results = run_evaluation_with_rewriter(
         query_file="query_test.json",
-        top_k_metadata=5,
-        top_k_summary=5,
-        top_k_meeting=10,
+        top_k_vector=5,
+        top_k_bm25=20,
+        num_paraphrases=2,
+        level='summary',
         suppress_output=True
     )

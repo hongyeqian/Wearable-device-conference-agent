@@ -30,9 +30,12 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 # Chunking settings
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 120
+ONLY_SUMMARY = True  # If True, only process summary level chunks
 
 
-# retrieval settings
+
+
+# retrieval settings, at current stage, we do not use this.
 TOP_K_SUMMARY = 3
 TOP_K_MEETING = 3
 TOP_K_CHUNK = 5

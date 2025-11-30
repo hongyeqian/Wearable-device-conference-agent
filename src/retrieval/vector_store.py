@@ -222,7 +222,7 @@ class HybridSearchVectorStore:
                      top_k: int,
                      allowed_indices: Optional[Set[int]] = None) -> List[Dict[str, Any]]:
         """
-        Perform BM25 keyword search (STEP 2B & 3B in diagram)
+        Perform BM25 keyword search
         
         Args:
             query_text: Query text
@@ -287,13 +287,6 @@ class HybridSearchVectorStore:
                               vector_results: List[Dict[str, Any]],
                               bm25_results: List[Dict[str, Any]],
                               top_k: int) -> List[Dict[str, Any]]:
-        """
-        Dict ={
-            'chunk id' = Data001,
-            
-        }
-        """
-    
         
         if vector_results:
             vector_scores = [r['vector_score'] for r in vector_results]
@@ -451,6 +444,202 @@ class HybridSearchVectorStore:
         )
         
         return self._combine_and_rank_results(vector_results, bm25_results, top_k)
+            
+        
+            
+    
+    
+    
+    
+        
+        
+        
+    def search_multi_query(
+        self,
+        original_query: str,
+        query_rewrite: Dict[str, Any],
+        level: str,
+        top_k_vector: int = 5,
+        top_k_bm25: int = 20,
+        num_paraphrases: int = 2
+    ) -> List[Dict[str, Any]]:
+        """
+        Multi-query search with query rewriting:
+        1. Vector search: original_query + normalized_query + paraphrases (top_k_vector each)
+        2. BM25 search: people + keywords (top_k_bm25)
+        3. Merge by chunk_id, keep max vector score, combine with BM25 score
+        
+        Args:
+            original_query: Original user query
+            query_rewrite: Query rewrite result from QueryRewriter
+            level: Level to search ('metadata', 'summary', 'meeting')
+            top_k_vector: Top k for each vector query (default: 5)
+            top_k_bm25: Top k for BM25 keyword query (default: 20)
+            num_paraphrases: Number of paraphrases to use (default: 2)
+            
+        Returns:
+            List of results with score_vector and score_bm25, sorted by hybrid score
+        """
+        import random
+        
+        if level not in ['metadata', 'summary', 'meeting']:
+            raise ValueError(f"Invalid level: {level}")
+        
+        # ========== Step 1: Vector Multi-Query Search ==========
+        vector_queries = []
+        
+        # Add original query
+        vector_queries.append(original_query)
+        
+        # Add normalized query
+        normalized_query = query_rewrite.get('normalized_query', '')
+        if normalized_query:
+            vector_queries.append(normalized_query)
+        
+        # Add paraphrases (randomly select num_paraphrases)
+        paraphrases = query_rewrite.get('paraphrases', [])
+        if paraphrases:
+            selected_paraphrases = random.sample(
+                paraphrases, 
+                min(num_paraphrases, len(paraphrases))
+            )
+            vector_queries.extend(selected_paraphrases)
+        
+        print(f"  Vector multi-query: {len(vector_queries)} queries")
+        for i, q in enumerate(vector_queries, 1):
+            print(f"    {i}. {q[:80]}...")
+        
+        # Perform vector search for each query
+        all_vector_results = []
+        for query in vector_queries:
+            results = self._vector_search(query, level, top_k_vector)
+            all_vector_results.extend(results)
+        
+        # Merge vector results by chunk_id, keep max vector_score
+        vector_results_by_chunk: Dict[str, Dict[str, Any]] = {}
+        for result in all_vector_results:
+            chunk_id = result['chunk_id']
+            vector_score = result['vector_score']
+            
+            if chunk_id not in vector_results_by_chunk:
+                vector_results_by_chunk[chunk_id] = result.copy()
+            else:
+                # Keep the result with highest vector_score
+                if vector_score > vector_results_by_chunk[chunk_id]['vector_score']:
+                    vector_results_by_chunk[chunk_id] = result.copy()
+        
+        vector_candidates = list(vector_results_by_chunk.values())
+        print(f"  Vector search: {len(all_vector_results)} raw results -> {len(vector_candidates)} unique chunks")
+        
+        # ========== Step 2: BM25 Keyword Search ==========
+        # Build keyword query from people + keywords
+        entities = query_rewrite.get('entities', {})
+        people = entities.get('people', [])
+        keywords = entities.get('keywords', [])
+        
+        # Combine people and keywords
+        keyword_terms = people + keywords
+        keyword_query = ' '.join(keyword_terms)
+        
+        print(f"  BM25 keyword query: '{keyword_query}'")
+        
+        # Perform BM25 search
+        bm25_results = self._bm25_search(keyword_query, level, top_k_bm25)
+        print(f"  BM25 search: {len(bm25_results)} results")
+        
+        # ========== Step 3: Merge Results ==========
+        # Create a dictionary to merge by chunk_id
+        merged_results: Dict[str, Dict[str, Any]] = {}
+        
+        # Add vector results
+        for result in vector_candidates:
+            chunk_id = result['chunk_id']
+            merged_results[chunk_id] = {
+                'chunk_id': chunk_id,
+                'meeting_id': result.get('meeting_id'),
+                'level': level,
+                'text': result.get('text'),
+                'metadata': result.get('metadata'),
+                'score_vector': result['vector_score'],  # Raw vector score
+                'score_bm25': 0.0,  # Default, will be updated if found in BM25
+                'index': result.get('index')
+            }
+        
+        # Add/update with BM25 results
+        for result in bm25_results:
+            chunk_id = result['chunk_id']
+            bm25_score = result['bm25_score']
+            
+            if chunk_id in merged_results:
+                # Update existing result with BM25 score
+                merged_results[chunk_id]['score_bm25'] = bm25_score
+            else:
+                # Add new result from BM25 only
+                merged_results[chunk_id] = {
+                    'chunk_id': chunk_id,
+                    'meeting_id': result.get('meeting_id'),
+                    'level': level,
+                    'text': result.get('text'),
+                    'metadata': result.get('metadata'),
+                    'score_vector': 0.0,  # Default, not found in vector search
+                    'score_bm25': bm25_score,
+                    'index': result.get('index')
+                }
+        
+        # Normalize scores and calculate hybrid score
+        all_vector_scores = [r['score_vector'] for r in merged_results.values() if r['score_vector'] > 0]
+        all_bm25_scores = [r['score_bm25'] for r in merged_results.values() if r['score_bm25'] > 0]
+        
+        # Normalize vector scores
+        if all_vector_scores:
+            min_vec = min(all_vector_scores)
+            max_vec = max(all_vector_scores)
+            vec_range = max_vec - min_vec if max_vec != min_vec else 1.0
+        else:
+            vec_range = 1.0
+        
+        # Normalize BM25 scores
+        if all_bm25_scores:
+            min_bm25 = min(all_bm25_scores)
+            max_bm25 = max(all_bm25_scores)
+            bm25_range = max_bm25 - min_bm25 if max_bm25 != min_bm25 else 1.0
+        else:
+            bm25_range = 1.0
+        
+        # Calculate hybrid scores
+        final_results = []
+        for result in merged_results.values():
+            # Normalize scores
+            if result['score_vector'] > 0:
+                result['score_vector_norm'] = (result['score_vector'] - min_vec) / vec_range
+            else:
+                result['score_vector_norm'] = 0.0
+            
+            if result['score_bm25'] > 0:
+                result['score_bm25_norm'] = (result['score_bm25'] - min_bm25) / bm25_range
+            else:
+                result['score_bm25_norm'] = 0.0
+            
+            # Calculate hybrid score
+            result['hybrid_score'] = (
+                self.alpha * result['score_vector_norm'] + 
+                (1 - self.alpha) * result['score_bm25_norm']
+            )
+            result['score'] = result['hybrid_score']  # For compatibility
+        
+        # Sort by hybrid score
+        final_results = sorted(
+            merged_results.values(),
+            key=lambda x: x['hybrid_score'],
+            reverse=True
+        )
+        
+        print(f"  Merged results: {len(final_results)} total chunks")
+        print(f"    - Vector only: {sum(1 for r in final_results if r['score_bm25'] == 0)}")
+        print(f"    - BM25 only: {sum(1 for r in final_results if r['score_vector'] == 0)}")
+        print(f"    - Both: {sum(1 for r in final_results if r['score_vector'] > 0 and r['score_bm25'] > 0)}")
+        
+        return final_results
             
         
             

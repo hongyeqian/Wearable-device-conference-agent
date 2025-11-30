@@ -8,6 +8,7 @@ sys.path.insert(0, str(project_root))
 
 
 from src.retrieval.vector_store import HybridSearchVectorStore
+from src.retrieval.metadata_filter import MetadataFilter
 
 @dataclass
 class HierarchicalResults:
@@ -25,9 +26,12 @@ class HierarchicalResults:
                             
 class HierarchicalRetriever:
     
-    def __init__(self, vector_store: HybridSearchVectorStore):
+    def __init__(
+        self, 
+        vector_store: HybridSearchVectorStore
+    ):
         self.vector_store = vector_store
-        
+    
         
     def _extract_ids_from_summaries(self, summary_results: List[Dict[str, Any]]):
         entry_ids = set()
@@ -111,6 +115,57 @@ class HierarchicalRetriever:
         print(f"Found {len(results.meeting_results)} meeting results")
                    
         return results
+    
+    
+    def search_summary_only(self, query: str, top_k_summary: int = 10) -> HierarchicalResults:
+        results = HierarchicalResults()
+        
+        # Directly search summary level without any filtering
+        print(f"\nSearching summary level directly (top_k={top_k_summary})...")
+        
+        results.summary_results = self.vector_store.search(
+            query_text=query,
+            Level='summary',
+            top_k=top_k_summary
+        )
+        
+        print(f"Found {len(results.summary_results)} summary results")
+        
+        return results
+        
+        
+    def search_with_rewriter(
+        self,
+        original_query: str,
+        query_rewrite: Dict[str, Any],
+        level: str = 'summary',
+        top_k_vector: int = 5,
+        top_k_bm25: int = 20,
+        num_paraphrases: int = 2
+    ) -> List[Dict[str, Any]]:
+        """
+        Search using query rewriter with multi-query strategy.
+        
+        Args:
+            original_query: Original user query
+            query_rewrite: Query rewrite result from QueryRewriter
+            level: Level to search ('metadata', 'summary', 'meeting')
+            top_k_vector: Top k for each vector query
+            top_k_bm25: Top k for BM25 keyword query
+            num_paraphrases: Number of paraphrases to use
+            
+        Returns:
+            List of search results with score_vector and score_bm25
+        """
+        # Perform multi-query search (no time filtering)
+        return self.vector_store.search_multi_query(
+            original_query=original_query,
+            query_rewrite=query_rewrite,
+            level=level,
+            top_k_vector=top_k_vector,
+            top_k_bm25=top_k_bm25,
+            num_paraphrases=num_paraphrases
+        )
         
         
     

@@ -1,0 +1,61 @@
+{
+  "high_level_topic": "Discussion on Elastic Search Implementation",
+  "second_level_topics": [
+    {
+      "topic_name": "Configuration and Methods",
+      "bullet_points": [
+        {
+          "point": "Discussed the configuration of Elastic Search and the use of dense factors."
+        },
+        {
+          "point": "Introduced a generator method for converting chunks into factors."
+        },
+        {
+          "point": "Emphasized the necessity of writing mapping for Elastic Search."
+        }
+      ]
+    },
+    {
+      "topic_name": "Reasons for Using Elastic Search",
+      "bullet_points": [
+        {
+          "point": "Elastic Search allows for efficient filtering of metadata."
+        },
+        {
+          "point": "It uses kn methods to find similar factors compared to traditional methods."
+        },
+        {
+          "point": "Dense factors are preferred for handling large datasets like meeting records."
+        }
+      ]
+    },
+    {
+      "topic_name": "Testing and Performance Issues",
+      "bullet_points": [
+        {
+          "point": "Test results showed poor performance without filtering."
+        },
+        {
+          "point": "Discussed the need for re-ranking methods to improve results."
+        },
+        {
+          "point": "Identified the importance of testing the filter logic for better accuracy."
+        }
+      ]
+    },
+    {
+      "topic_name": "Next Steps and Action Items",
+      "bullet_points": [
+        {
+          "point": "Plan to implement traditional factor search methods alongside Elastic Search."
+        },
+        {
+          "point": "Need to prepare real conversation data for testing."
+        },
+        {
+          "point": "Discussed using OpenAI's Whisper for transcribing conversations into data."
+        }
+      ]
+    }
+  ]
+}

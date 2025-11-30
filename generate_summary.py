@@ -3,12 +3,10 @@ import re
 from pathlib import Path
 from openai import OpenAI
 
-client = OpenAI()  # 使用 .env / 环境变量中的 OPENAI_API_KEY
+client = OpenAI() 
 
 
-# ----------------------------------------------------
-# Summary-level prompt (英文版，严格贴合 summary004 风格)
-# ----------------------------------------------------
+
 SUMMARY_PROMPT_TEMPLATE = """
 You are a summary-level generation agent.
 Your input will be a single `meetLevelXXX.md` file.

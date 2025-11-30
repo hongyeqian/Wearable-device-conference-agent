@@ -14,7 +14,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.data_loader.loader import Meeting
-from config.settings import CHUNK_SIZE, CHUNK_OVERLAP
+from config.settings import CHUNK_SIZE, CHUNK_OVERLAP, ONLY_SUMMARY
 
 
 
@@ -42,22 +42,23 @@ class HierarchicalChunker:
           ↓ details_in
         Meeting Level        ← Structured meeting content (split by topics with smart splitting)
     
-    Summary level splits by individual summary sections. Meeting level splits by topics,
+    Summary level splits tradtional method, only different is overlap is bullet point. Meeting level splits by topics,
     ensuring each topic stays intact when possible, with overlap when splitting is needed.
     """
 
 
-    def __init__(self, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP):
+    def __init__(self, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP, only_summary: bool = ONLY_SUMMARY):
         """
         Initialize the hierarchical chunker
 
         Args:
             chunk_size: int = CHUNK_SIZE
             chunk_overlap: int = CHUNK_OVERLAP
-        
+            only_summary: bool = ONLY_SUMMARY, if True, only process summary level chunks
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.only_summary = only_summary
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size, 
             chunk_overlap=chunk_overlap,
@@ -92,12 +93,17 @@ class HierarchicalChunker:
         
         # Process each meeting
         for meeting in meetings:
-            result['metadata'].extend(self.chunk_metadata_level(meeting))
-            result['summary'].extend(self.chunk_summary_level(meeting))
-            result['meeting'].extend(self.chunk_meeting_level(meeting))
-            
-            if include_chunk_level:
-                result['chunk'].extend(self.chunk_fine_grained_level(meeting))
+            # Only process summary level if ONLY_SUMMARY is True
+            if self.only_summary:
+                result['summary'].extend(self.chunk_summary_level(meeting))
+            else:
+                # Process all levels
+                result['metadata'].extend(self.chunk_metadata_level(meeting))
+                result['summary'].extend(self.chunk_summary_level(meeting))
+                result['meeting'].extend(self.chunk_meeting_level(meeting))
+                
+                if include_chunk_level:
+                    result['chunk'].extend(self.chunk_fine_grained_level(meeting))
         
         # Print statistics
         self._print_statistics(result)
@@ -111,9 +117,16 @@ class HierarchicalChunker:
         print("HIERARCHICAL CHUNKING STATISTICS")
         print(f"{'='*80}")
         
-        print(f"  Metadata level     : {len(result['metadata'])} chunks")
-        print(f"  Summary level      : {len(result['summary'])} chunks")
-        print(f"  Meeting level      : {len(result['meeting'])} chunks")
+        if self.only_summary:
+            print(f"  Mode: SUMMARY LEVEL ONLY")
+            print(f"  Summary level      : {len(result['summary'])} chunks")
+            print(f"  Metadata level     : [SKIPPED]")
+            print(f"  Meeting level      : [SKIPPED]")
+        else:
+            print(f"  Mode: ALL LEVELS")
+            print(f"  Metadata level     : {len(result['metadata'])} chunks")
+            print(f"  Summary level      : {len(result['summary'])} chunks")
+            print(f"  Meeting level      : {len(result['meeting'])} chunks")
         
         if 'chunk' in result:
             if result['chunk']:
@@ -121,7 +134,8 @@ class HierarchicalChunker:
             else:
                 print(f"  Chunk level        : [DISABLED]")
         else:
-            print(f"  Chunk level        : [DISABLED] (use include_chunk_level=True to enable)")
+            if not self.only_summary:
+                print(f"  Chunk level        : [DISABLED] (use include_chunk_level=True to enable)")
         
         print(f"{'='*80}\n")
 
