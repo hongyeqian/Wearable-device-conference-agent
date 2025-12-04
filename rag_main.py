@@ -19,6 +19,53 @@ from src.retrieval.vector_store import HybridSearchVectorStore
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
 from src.retrieval.rag_pipeline import RAGPipeline
 from config.settings import DATA_DIR
+from src.retrieval import query_rewriter
+
+# 全局会议目录字符串，由 rag_main 初始化时填充
+MEETING_CATALOG: str = ""
+
+
+def set_meetings(meetings: List[Any]) -> None:
+    """
+    由 rag_main 在系统初始化时调用，
+    把 loader.load_all_meetings() 的结果转换成一个简短的“会议目录”文本，
+    用于提供给 LLM 作为上下文。
+    """
+    global MEETING_CATALOG
+    lines: List[str] = []
+
+    for m in meetings or []:
+        # datetime
+        dt_raw = getattr(m, "datetime", None)
+        date_str = ""
+        if isinstance(dt_raw, datetime):
+            date_str = dt_raw.date().isoformat()
+        elif isinstance(dt_raw, str):
+            try:
+                # 支持 "2025-11-30T20:21:00+08:00" 或 "2025-11-30"
+                text = dt_raw.strip().replace("+08:00", "")
+                if "T" in text:
+                    d = datetime.fromisoformat(text).date()
+                else:
+                    d = datetime.strptime(text, "%Y-%m-%d").date()
+                date_str = d.isoformat()
+            except Exception:
+                pass
+
+        # participants（只拿 name）
+        names: List[str] = []
+        for p in getattr(m, "participants", []):
+            if isinstance(p, dict):
+                name = (p.get("name") or "").strip()
+            else:
+                name = str(p).strip()
+            if name:
+                names.append(name)
+
+        if date_str and names:
+            lines.append(f"- {date_str}: " + ", ".join(names))
+
+    MEETING_CATALOG = "\n".join(lines)
 
 
 def save_chunks_to_file(
@@ -185,10 +232,13 @@ def initialize_rag_system(
     loader = DataLoader(data_dir)
     meetings = loader.load_all_meetings()
     print(f"Loaded {len(meetings)} meetings")
-    
+
     if not meetings:
         raise ValueError("No meetings found. Please check your data directory.")
-    
+
+    # ★ 把 meetings 列表注册给 rewriter，用于 prompt 里的 MEETING CATALOG
+    query_rewriter.set_meetings(meetings)
+
     # Step 2: Chunk meetings
     print("\n[Step 2] Chunking meetings...")
     chunker = HierarchicalChunker()
@@ -223,6 +273,9 @@ def initialize_rag_system(
         retriever=retriever,
         use_query_rewriter=True
     )
+
+    # Set meetings for query rewriter
+    query_rewriter.set_meetings(meetings)
     
     print("\n" + "=" * 80)
     print("RAG System Initialized Successfully!")
