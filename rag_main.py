@@ -2,6 +2,17 @@
 RAG System Main Entry Point
 Complete RAG pipeline with query rewriting, hierarchical retrieval, and answer generation.
 """
+
+
+import os
+# clean useless environment variable SSL_CERT_FILE
+if "SSL_CERT_FILE" in os.environ:
+    cert_path = os.environ["SSL_CERT_FILE"]
+    if cert_path and not os.path.exists(cert_path):
+        del os.environ["SSL_CERT_FILE"]
+        print(f"Warning: Removed invalid SSL_CERT_FILE: {cert_path}")
+
+
 import sys
 import argparse
 from pathlib import Path
@@ -19,7 +30,7 @@ from src.retrieval.vector_store import HybridSearchVectorStore
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
 from src.retrieval.rag_pipeline import RAGPipeline
 from config.settings import DATA_DIR
-from src.retrieval import query_rewriter
+from src.retrieval import query_rewriter_muti_agent
 
 # 全局会议目录字符串，由 rag_main 初始化时填充
 MEETING_CATALOG: str = ""
@@ -237,7 +248,8 @@ def initialize_rag_system(
         raise ValueError("No meetings found. Please check your data directory.")
 
     # ★ 把 meetings 列表注册给 rewriter，用于 prompt 里的 MEETING CATALOG
-    query_rewriter.set_meetings(meetings)
+    #query_rewriter.set_meetings(meetings)
+    query_rewriter_muti_agent.set_meetings(meetings)
 
     # Step 2: Chunk meetings
     print("\n[Step 2] Chunking meetings...")
@@ -269,13 +281,13 @@ def initialize_rag_system(
     
     # Step 6: Create RAG pipeline
     print("\n[Step 6] Creating RAG pipeline...")
+    from src.retrieval.answer_generator_muti_agent import AnswerGeneratorMultiAgent
+    answer_generator = AnswerGeneratorMultiAgent()
     pipeline = RAGPipeline(
         retriever=retriever,
+        answer_generator=answer_generator,
         use_query_rewriter=True
     )
-
-    # Set meetings for query rewriter
-    query_rewriter.set_meetings(meetings)
     
     print("\n" + "=" * 80)
     print("RAG System Initialized Successfully!")

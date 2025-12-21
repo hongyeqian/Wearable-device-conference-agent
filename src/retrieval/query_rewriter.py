@@ -23,15 +23,15 @@ from openai import OpenAI
 from config.settings import OPENAI_API_KEY, OPENAI_MODEL, DATA_DIR
 from src.data_loader.loader import DataLoader
 
-# 全局会议目录字符串，由 rag_main 初始化时填充
+# global meeting catalog string, filled by rag_main when system initializes
 MEETING_CATALOG: str = ""
 
 
 def set_meetings(meetings: List[Any]) -> None:
     """
-    由 rag_main 在系统初始化时调用，
-    把 loader.load_all_meetings() 的结果转换成一个简短的“会议目录”文本，
-    用于提供给 LLM 作为上下文。
+    Called by rag_main when system initializes,
+    converts the result of loader.load_all_meetings() into a short "meeting catalog" text,
+    used to provide to LLM as context.
     """
     global MEETING_CATALOG
     lines: List[str] = []
@@ -44,7 +44,7 @@ def set_meetings(meetings: List[Any]) -> None:
             date_str = dt_raw.date().isoformat()
         elif isinstance(dt_raw, str):
             try:
-                # 支持 "2025-11-30T20:21:00+08:00" 或 "2025-11-30"
+                # support "2025-11-30T20:21:00+08:00" or "2025-11-30"
                 text = dt_raw.strip().replace("+08:00", "")
                 if "T" in text:
                     d = datetime.fromisoformat(text).date()
@@ -54,7 +54,7 @@ def set_meetings(meetings: List[Any]) -> None:
             except Exception:
                 pass
 
-        # participants（只拿 name）
+        # participants (only take name)
         names: List[str] = []
         for p in getattr(m, "participants", []):
             if isinstance(p, dict):
@@ -88,6 +88,13 @@ class QueryRewrite(BaseModel):
     details: str = Field(description="Time range, speakers, events, locations, or other constraints")
     entities: Entities = Field(description="Extracted entities grouped by category")
     paraphrases: List[str] = Field(description="2-3 paraphrased questions with same meaning but different wording")
+    speaker_perspective: str = Field(
+        description=(
+            "Who is the main speaker perspective of this question, for example: "
+            "'current_user', 'Ankit', 'Hongye Qian', or 'third_person_observer'. "
+            "This MUST be inferred from the question text and current user context."
+        )
+    )
 
 
 # System prompt for query rewriting
@@ -98,7 +105,11 @@ Current Date: {current_date}
 Current Time: {current_time}
 Day of Week: {day_of_week}
 
-MEETING CATALOG (for resolving time / meeting references):
+CURRENT USER CONTEXT:
+Current user name (who is asking this question): {current_user_name}
+Current user role (if known): {current_user_role}
+
+MEETING CATALOG:
 {meeting_catalog}
 
 Given a user question about a meeting or tech topic, you must:
@@ -114,23 +125,51 @@ Given a user question about a meeting or tech topic, you must:
 
 2. Extract main clause, details, and structured entities (people, organizations,
    products, events, time expressions, keywords).
+   
+3. Time assignment guard:
+   - If the question contains NO explicit or relative time expression
+     (no 'on <date>', 'yesterday', 'last/previous meeting/sync/discussion',
+     'last week', etc.), DO NOT assign any date. Leave entities.time empty
+     and keep normalized_query without any date.
 
-3. For MEETING-RELATED time references:
-   - When the user mentions or implies a specific meeting 
-     (e.g., "last meeting", "previous sync", "最近一次会议", 
-      or similar semantics like "their last discussion"),
-     you MUST use the MEETING CATALOG above to infer which concrete date it refers to.
-   - Choose the MOST RECENT date in the catalog that matches the participants in the question.
-   - Put that concrete date into:
-       • entities.time (as 'YYYY-MM-DD')
+
+4. For MEETING-RELATED time references (ONLY when such expressions appear):
+   - When the user mentions or implies a specific meeting with relative time
+     (e.g., "last meeting", "previous sync", "their last discussion"), use the MEETING CATALOG to infer the concrete date.
+   - Choose the MOST RECENT date in the catalog that matches the participants.
+   - Put that date into:
+       • entities.time (YYYY-MM-DD)
        • normalized_query (replace the relative phrase with 'on YYYY-MM-DD')
-       • all paraphrases (make sure the date appears explicitly).
+       • all paraphrases (include the date explicitly).
 
-4. If the MEETING CATALOG does not contain any meeting that matches the participants,
+5. If the MEETING CATALOG does not contain any meeting that matches the participants,
    fall back to using the CURRENT DATE AND TIME CONTEXT to interpret relative expressions
    like "yesterday", "last week", etc.
+   
+6. First-person and perspective handling:
+   - The question is asked by a specific current user, provided in the CURRENT USER CONTEXT.
+   - When the question contains first-person expressions ("I", "me", "my", "we", "us", "our"),
+     you MUST interpret them as the CURRENT USER.
+   - In entities.people, always list concrete names, NOT pronouns.
+   - When the question is about self-identity (e.g., "Who am I?", "What am I?", "What is my role?"),
+     you MUST:
+       • Set entities.people = [current_user_name]
+       • Replace first-person pronouns in normalized_query with the current_user_name
+         (e.g., "Who is Hongye Qian?")
+       • Set speaker_perspective = "current_user"
 
-5. Generate 2–3 paraphrased questions that keep the same meaning as the
+7. You MUST fill the field `speaker_perspective` as follows:
+   - If the question is clearly asked from the current user's point of view about their
+     own actions or discussions (e.g., "What did I discuss with Hongye?"),
+     set `speaker_perspective` to "current_user".
+   - If the question is explicitly framed from another named person's perspective
+     (e.g., "From Ankit's point of view, what did we decide?"),
+     set `speaker_perspective` to that person's name (e.g., "Ankit").
+   - If the question is clearly from an external observer's perspective
+     (e.g., "What did Ankit and Hongye discuss?"),
+     set `speaker_perspective` to "third_person_observer".
+
+8. Generate 2–3 paraphrased questions that keep the same meaning as the
    original question but use different wording.
    
    IMPORTANT: Include time information in paraphrases when relevant.
@@ -181,15 +220,22 @@ class QueryRewriter:
             'day_of_week': now.strftime('%A')
         }
     
-    def _build_prompt_with_time_context(self) -> str:
+    def _build_prompt_with_time_context(self,
+                                        current_user_name: str = "Hongye Qian",
+                                        current_user_role: str = "Data Scientist",
+                                        ) -> str:
         """
         Build the prompt with current time context.
         """
         time_context = self._get_current_time_context()
         catalog = MEETING_CATALOG or "No meetings available."
         return QUERY_REWRITE_PROMPT_TEMPLATE.format(
+            current_date=time_context["current_date"],
+            current_time=time_context["current_time"],
+            day_of_week=time_context["day_of_week"],
+            current_user_name=current_user_name,
+            current_user_role=current_user_role,
             meeting_catalog=catalog,
-            **time_context,
         )
     
     
@@ -314,7 +360,8 @@ def create_rewriter(
 if __name__ == "__main__":
     import json
 
-    sample_query = "What did Ankit and Hongye Qian discuss in their last meeting?"
+    sample_query = "What did Ankit and I discuss in the last meeting?"
+    #sample_query = "What am I?"
     rewriter = QueryRewriter()
 
     try:

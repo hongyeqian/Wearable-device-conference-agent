@@ -11,9 +11,11 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever, HierarchicalResults
-from src.retrieval.query_rewriter import QueryRewriter
+#from src.retrieval.query_rewriter import QueryRewriter
+from src.retrieval.query_rewriter_muti_agent import QueryRewriter
 from src.retrieval.answer_generator import AnswerGenerator
-
+#from src.retrieval.answer_generator_muti_agent import AnswerGeneratorOrchestratorAgent
+from src.retrieval.answer_generator_muti_agent import AnswerGeneratorMultiAgent
 
 class RAGPipeline:
     """Complete RAG pipeline with query rewriting, retrieval, and answer generation"""
@@ -21,7 +23,8 @@ class RAGPipeline:
     def __init__(
         self,
         retriever: HierarchicalRetriever,
-        answer_generator: Optional[AnswerGenerator] = None,
+        #answer_generator: Optional[AnswerGenerator] = None,
+        answer_generator: Optional[AnswerGeneratorMultiAgent] = None,
         query_rewriter: Optional[QueryRewriter] = None,
         use_query_rewriter: bool = True
     ):
@@ -125,25 +128,14 @@ class RAGPipeline:
         )
         selected_chunks = chunks_with_level[:max_chunks_for_answer]
         
-        # Generate answer
-        # Use normalized_query if it contains date conversion, otherwise use original query
-        query_for_llm = user_query
-        if query_rewrite_data:
-            normalized = query_rewrite_data.get('normalized_query', '')
-            # Check if normalized query has date conversion (contains YYYY-MM-DD format)
-            import re
-            if re.search(r'\d{4}-\d{2}-\d{2}', normalized):
-                # Normalized query has specific date, use it instead of original
-                query_for_llm = normalized
-
         answer_result = self.answer_generator.generate_answer(
-            query=query_for_llm,  # Use normalized query with date conversion
+            user_query=user_query,
             chunks=selected_chunks,
-            max_chunks=max_chunks_for_answer,
-            include_citations=True
+            query_rewrite=query_rewrite_data,
+            max_chunks=max_chunks_for_answer
         )
         
-        return {
+        return{
             'answer': answer_result['answer'],
             'original_query': user_query,
             'rewritten_query': query_rewrite_data.get('normalized_query') if query_rewrite_data and query_rewrite_data.get('normalized_query') != user_query else None,
