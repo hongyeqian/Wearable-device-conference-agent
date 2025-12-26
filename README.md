@@ -1,265 +1,330 @@
-# README.md
+# Meeting Transcript RAG System
 
+A sophisticated Retrieval-Augmented Generation (RAG) system designed for querying and analyzing meeting transcripts. The system implements hierarchical chunking, multi-agent query processing, and hybrid retrieval to provide accurate, context-aware answers to questions about meeting content.
 
+## 🏗️ System Architecture
 
-## Project Overview
+### Core Components
 
-This is a Retrieval-Augmented Generation (RAG) system implementing hierarchical chunking for meeting transcripts. The system processes meeting data through multiple granularity levels (metadata, summary, meeting topics, conversations) to enable effective semantic search and retrieval.
-
-## Core Architecture
-
-### Data Flow
 ```
-Raw Meeting Data (datademo/con*/)
-  └─> DataLoader (src/data_loader/loader.py)
-      └─> Meeting objects (with metadata, summary, transcript)
-          └─> HierarchicalChunker (src/chunking/chunker.py)
-              └─> ChunkMetadata objects (3 levels by default)
-                  └─> EmbeddingGenerator (src/embeddings/generator.py)
-                      └─> Vector embeddings for retrieval
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Data Layer    │    │ Retrieval Layer │    │   Query Layer   │
+│                 │    │                 │    │                 │
+│ • DataLoader    │    │ • Vector Store  │    │ • Query Rewriter│
+│ • Hierarchical  │    │ • Hybrid Search │    │ • Answer Gen.   │
+│   Chunker       │    │ • Hierarchical  │    │ • Orchestrator  │
+│ • Embeddings    │    │   Retriever     │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   Web Interface │
+                    │                 │
+                    │ • Flask App     │
+                    │ • REST API      │
+                    │ • Session Mgmt  │
+                    └─────────────────┘
 ```
 
-### Hierarchical Chunking Levels
+### Data Processing Pipeline
 
-The system implements a 3-level hierarchy for retrieval:
+1. **Data Loading**: Loads meeting transcripts, metadata, summaries, and structured content from `datademo/` directory
+2. **Hierarchical Chunking**: Processes content at three levels (metadata, summary, meeting) with semantic-aware splitting
+3. **Embedding Generation**: Converts text chunks to vector embeddings using OpenAI's embedding models
+4. **Vector Storage**: Stores embeddings in FAISS with hybrid search capabilities (vector + BM25)
 
-1. **Metadata Level**: Meeting metadata converted to searchable text (participants, topics, keywords, brief summary)
-   - One chunk per meeting, not split
+### Query Processing Flow
 
-2. **Summary Level**: High-level meeting summaries treated as single documents
-   - Entire summary text split using bullet-level overlap at 1200 characters
-   - Extracts `summary_ids` (S001-T01, S001-A01) and `references` (M001-T01) for mapping to meeting level
+```
+User Query → Query Rewriter → Hierarchical Retrieval → Answer Generation → Response
+     ↓              ↓              ↓                      ↓
+  Raw Text    Multi-Agent       Hybrid Search       Multi-Agent
+             Processing       (Vector + BM25)       Generation
+```
 
-3. **Meeting Level**: Detailed topic/action item content split by semantic boundaries
-   - Split by individual topics/action items (- **Topic Title:** or - **Responsible Person:**)
-   - Only applies bullet-level overlap if a single topic/item exceeds 1200 characters
-   - Extracts `entry_id` (M001-T01, M001-A01) and `reference` (P001-P002) for mapping to paragraphs
+## 🚀 Key Features
 
-A legacy "chunk level" exists but is disabled by default (`include_chunk_level=False`) as it splits text without semantic boundaries.
+### Multi-Level Hierarchical Retrieval
+- **Metadata Level**: Meeting overview, participants, topics, and keywords
+- **Summary Level**: High-level meeting summaries with topic/action item references
+- **Meeting Level**: Detailed topic and action item content with paragraph references
 
-### Key Components
+### Advanced Query Processing
+- **Multi-Agent Query Rewriter**: Uses Google ADK agents for intelligent query normalization and paraphrasing
+- **Session Management**: Maintains conversation context across multiple queries
+- **Meeting Catalog Integration**: Provides temporal and participant context for query understanding
 
-**DataLoader** (`src/data_loader/loader.py`):
-- Loads meeting data from `datademo/con*/` directories
-- Each meeting has: `metaData*.json`, `data*.md` (transcript), `meetLevel*.json` or `.md` (topic summaries), `summary*.md` (embedding summaries)
-- Supports both JSON and text/markdown formats for meeting-level data
-- Automatically adds paragraph indices `[#P001]` to transcript files for reference tracking
+### Hybrid Search Technology
+- **Vector Search**: Semantic similarity using OpenAI embeddings
+- **BM25 Search**: Keyword-based retrieval for precise matching
+- **Score Fusion**: Combines vector and BM25 scores for optimal ranking
 
-**HierarchicalChunker** (`src/chunking/chunker.py`):
-- Core chunking logic with 3 main methods: `chunk_metadata_level()`, `chunk_summary_level()`, `chunk_meeting_level()`
-- Uses `MarkdownHeaderTextSplitter` from LangChain to split by section headers
-- Smart splitting strategy: bullet-level overlap preserves semantic context
-- Extracts IDs and references to establish clear retrieval hierarchy mapping
+### Web Interface
+- **Gemini-like UI**: Clean, intuitive interface for querying
+- **REST API**: Programmatic access via `/api/query` endpoint
+- **Health Monitoring**: System status and pipeline initialization checks
 
-**EmbeddingGenerator** (`src/embeddings/generator.py`):
-- Wraps OpenAI embeddings with batch processing and optional caching
-- Supports single query embeddings and batch document embeddings
-- Default model: `text-embedding-3-small` (1536 dimensions)
+## 📁 Project Structure
 
-### Configuration
+```
+├── config/
+│   ├── settings.py          # Configuration and API keys
+│   └── requirements.txt     # Python dependencies
+├── src/
+│   ├── data_loader/
+│   │   └── loader.py        # Meeting data loading and parsing
+│   ├── chunking/
+│   │   └── chunker.py       # Hierarchical text chunking
+│   ├── embeddings/
+│   │   └── generator.py     # OpenAI embedding generation
+│   └── retrieval/
+│       ├── vector_store.py      # FAISS + BM25 hybrid search
+│       ├── hierarchical_retriever.py
+│       ├── rag_pipeline.py      # Main RAG pipeline orchestration
+│       ├── orchestrator.py      # Query handling and session management
+│       ├── query_rewriter_muti_agent.py  # Multi-agent query rewriting
+│       └── answer_generator_muti_agent.py # Multi-agent answer generation
+├── datademo/                # Meeting data (con*/ directories)
+├── vector_store/            # FAISS indices and BM25 data
+├── outputs/                 # Query results and evaluation data
+├── templates/
+│   └── index.html          # Web interface template
+├── tests/                   # Unit tests and debugging tools
+├── rag_main.py             # Command-line interface
+├── web_app.py              # Flask web application
+└── requirements.txt        # Project dependencies
+```
 
-Settings are in `config/settings.py`:
-- `DATA_DIR`: Path to meeting data (default: `datademo/`)
-- `CHUNK_SIZE`: 800 characters (for legacy chunk level only)
-- `CHUNK_OVERLAP`: 120 characters (for legacy chunk level only)
-- `EMBEDDING_MODEL`: `text-embedding-3-small`
-- API keys loaded from `.env` file (not committed)
+## 🛠️ Installation & Setup
 
-## Development Commands
+### Prerequisites
+- Python 3.8+
+- OpenAI API key
+- Elasticsearch (optional, for alternative vector storage)
 
 ### Environment Setup
+
+1. **Clone and navigate to the project:**
+   ```bash
+   cd /path/to/your/project
+   ```
+
+2. **Create virtual environment:**
+   ```bash
+   python -m venv .venv
+   # Windows
+   .venv\Scripts\activate
+   # Linux/Mac
+   source .venv/bin/activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure environment variables:**
+   Create a `.env` file in the `config/` directory:
+   ```env
+   OPENAI_API_KEY=your_openai_api_key_here
+   OPENAI_MODEL=gpt-4  # or gpt-3.5-turbo
+   EMBEDDING_MODEL=text-embedding-3-small
+
+   # Optional Elasticsearch configuration
+   ELASTICSEARCH_URL=http://localhost:9200
+   ELASTICSEARCH_USERNAME=your_username
+   ELASTICSEARCH_PASSWORD=your_password
+   ```
+
+## 🚀 Usage
+
+### Command Line Interface
+
+**Initialize and run interactive mode:**
 ```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate (Windows)
-.venv\Scripts\activate
-
-# Activate (Linux/Mac)
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+python rag_main.py
 ```
 
-### Running Tests
+**Process a single query:**
 ```bash
-# Export all chunking results to text files
-python tests/test_chunking_export.py
-
-# Output will be in: output/chunking_results/
-# Files generated:
-#   - metadata_level_chunks.txt
-#   - summary_level_chunks.txt
-#   - meeting_level_chunks.txt
-#   - chunking_summary_report.txt
-
-# Debug timestamp extraction
-python tests/debug_timestamps.py
-
-# Debug paragraph indices extraction
-python tests/test_meeting_level_paragraph_indices.py
+python rag_main.py --query "What were the main action items from last week's meeting?"
 ```
 
-### Running Individual Modules
+**Advanced options:**
 ```bash
-# Test data loader
-python src/data_loader/loader.py
-
-# Test chunker
-python src/chunking/chunker.py
-
-# Test embedding generator (requires OpenAI API key)
-python src/embeddings/generator.py
+python rag_main.py --query "Who discussed the budget?" \
+  --top-k-vector 10 \
+  --top-k-bm25 30 \
+  --verbose \
+  --save-original-rank
 ```
 
-## Data Format Specifications
+### Web Application
+
+**Start the web server:**
+```bash
+python web_app.py
+```
+
+Access the interface at `http://localhost:5000`
+
+### API Usage
+
+**Query endpoint:**
+```bash
+curl -X POST http://localhost:5000/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What action items were assigned?"}'
+```
+
+**Health check:**
+```bash
+curl http://localhost:5000/api/health
+```
+
+## 🔧 Configuration
+
+Key settings in `config/settings.py`:
+
+```python
+# Data and model configuration
+DATA_DIR = PROJECT_ROOT / "datademo"
+EMBEDDING_MODEL = "text-embedding-3-small"
+OPENAI_MODEL = "gpt-4"
+
+# Chunking parameters
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 120
+ONLY_SUMMARY = True  # Focus on summary and meeting levels
+
+# Retrieval parameters
+TOP_K_VECTOR = 5    # Vector search results per query
+TOP_K_BM25 = 20     # BM25 search results per query
+
+# Session management
+APP_NAME = "agents"
+USER_ID = "u-main"
+```
+
+## 📊 Data Format
 
 ### Meeting Data Structure
 
-Each meeting is stored in a `datademo/con*/` directory with these files:
+Each meeting resides in a `datademo/conXXX/` directory with:
 
-**metaData*.json**: Meeting metadata including:
-- `meeting_id`, `title`, `datetime`, `duration_sec`
-- `participants`: list of `{name, role}` objects
-- `organizations`, `topics`, `keywords`
-- `summary_brief`: one-sentence summary
-- `related_files`: pointers to other files
+- **`metaDataXXX.json`**: Meeting metadata (participants, datetime, topics, etc.)
+- **`dataXXX.md`**: Raw transcript with timestamped conversation
+- **`meetLevelXXX.md`**: Topic-level structured summaries
+- **`summaryXXX.md`**: High-level meeting summaries
 
-**data*.md**: Raw transcript with conversation turns
-- Format: `[#P001] [HH:MM:SS] Speaker: Content`
-- Paragraph indices `[#P001]` are auto-added by DataLoader
+### Hierarchical Content Levels
 
-**meetLevel*.md**: Topic-level detailed summaries
-- Markdown format with `## Key Topics` and `## Action Items` sections
-- Each entry starts with `- **Topic Title:**` or `- **Responsible Person:**`
-- Contains: Topic id (M001-T01), Reference (P001-P002), Summary bullets, Participants, Duration
-- Entries may be separated by `------` dividers (optional)
+1. **Metadata Level**: Structured meeting information for quick filtering
+2. **Summary Level**: Condensed meeting overviews with key takeaways
+3. **Meeting Level**: Detailed topic and action item breakdowns
 
-**summary*.md**: High-level meeting summaries for quick retrieval
-- Markdown format with meeting header: `## M001 — Title`
-- Each entry format: `- **[S001-T01] Topic: ...` or `- **[S001-A01] Action: ...`
-- Contains: summary_id, description, Reference to meeting-level (e.g., M001-T01)
-- Establishes Summary → Meeting retrieval hierarchy
+## 🧪 Testing & Evaluation
 
-### Important Parsing Logic
+### Running Tests
 
-**Summary ID Format**: `S001-T01` (Summary 001, Topic 01) or `S001-A01` (Summary 001, Action 01)
+```bash
+# Export chunking results for analysis
+python tests/test_chunking_export.py
 
-**Meeting ID Format**: `M001-T01` (Meeting 001, Topic 01) or `M001-A01` (Meeting 001, Action 01)
+# Test retrieval components
+python tests/test_retrieve.py
 
-**Reference Parsing**:
-- Paragraph range: `P001–P002` expands to `[#P001, #P002]`
-- Discrete paragraphs: `P004,P008` expands to `[#P004, #P008]`
-- Meeting references: `M001-T01, M001-T04` (can have multiple references)
-
-**Timestamp Pattern**: `\[(\d{2}:\d{2}(?::\d{2})?)\]` matches `[HH:MM:SS]` or `[MM:SS]`
-
-**Paragraph Index Pattern**: `\[#P(\d+)\]` matches `[#P001]`, `[#P002]`, etc.
-
-## Important Implementation Details
-
-### Chunking Strategy
-
-1. **Metadata Level**: One chunk per meeting
-   - All metadata converted to searchable text
-   - Not split
-
-2. **Summary Level**: Treat entire summary as single document
-   - Split using bullet-level overlap at 1200 characters
-   - Extract all `summary_ids` and `references` from each chunk
-   - Chunk may contain multiple summary entries
-
-3. **Meeting Level**: Split by semantic boundaries (topics/action items)
-   - First split by `## Key Topics` and `## Action Items` sections
-   - Then split by individual entries (`- **Topic Title:**` or `- **Responsible Person:**`)
-   - Only apply bullet-level overlap if single entry > 1200 characters
-   - Keep complete topics/items together when possible
-
-### 3-Level Retrieval Hierarchy
-
-Clear mapping relationships for retrieval navigation:
-
-```
-Summary Level (High-level abstractions)
-  ↓ references
-Meeting Level (Detailed topic/action content)
-  ↓ references
-Data Level (Raw transcript paragraphs)
+# Debug timestamp parsing
+python tests/debug_timestamps.py
 ```
 
-**Example Mapping**:
-- Summary: `S001-T01` → references → `M001-T01`
-- Meeting: `M001-T01` → references → `P001-P002` → expands to `[#P001, #P002]`
+### Evaluation Scripts
 
-### Metadata Extraction
+```bash
+# Generate evaluation reports
+python generate/evaluation_script.py
 
-ChunkMetadata objects store:
-- `meeting_id`, `level`, `chunk_id`, `text` (for embedding)
-- `metadata` dict with level-specific info:
-  - **Summary level**: `summary_ids` (list), `references` (list of M###-T##/A##)
-  - **Meeting level**: `section`, `entry_id` (M###-T##/A##), `reference` (P###-P###), `paragraph_indices` (list)
-
-### Smart Splitting with Overlap
-
-The `_split_with_bullet_overlap()` method:
-1. Parses text into segments (bullet vs non-bullet)
-2. Groups segments into chunks ≤ chunk_size
-3. When splitting, starts new chunk with last bullet from previous chunk (provides context)
-4. This preserves semantic coherence better than character-based splitting
-
-## Code Patterns
-
-### Loading and Chunking
-```python
-from src.data_loader.loader import DataLoader
-from src.chunking.chunker import HierarchicalChunker
-from config.settings import DATA_DIR
-
-loader = DataLoader(DATA_DIR)
-meetings = loader.load_all_meetings()
-
-chunker = HierarchicalChunker()
-all_chunks = chunker.chunk_all_levels(
-    meetings,
-    include_chunk_level=False  # Disable legacy chunk level
-)
-
-# Access chunks by level
-metadata_chunks = all_chunks['metadata']
-summary_chunks = all_chunks['summary']
-meeting_chunks = all_chunks['meeting']
+# Results saved to outputs/evaluation_results_*.txt
 ```
 
-### Generating Embeddings
-```python
-from src.embeddings.generator import EmbeddingGenerator
+## 🔍 Advanced Features
 
-generator = EmbeddingGenerator()
+### Multi-Agent Architecture
 
-# Single query embedding
-query_embedding = generator.generate_embedding("your query")
+- **Query Rewriter**: Normalizes queries, extracts entities, generates paraphrases
+- **Answer Generator**: Produces context-aware responses with citations
+- **Session Service**: Maintains conversation state using Google ADK
 
-# Batch embeddings by level
-embeddings_by_level = generator.generate_embeddings_by_level(
-    all_chunks,
-    batch_size=100,
-    use_cache=False
-)
+### Hybrid Retrieval Strategy
+
+The system combines multiple retrieval techniques:
+
+1. **Query Rewriting**: Transforms user queries for better retrieval
+2. **Multi-Query Search**: Searches with original query + paraphrases
+3. **Hybrid Scoring**: Fuses vector similarity and BM25 keyword scores
+4. **Hierarchical Ranking**: Prioritizes more relevant content levels
+
+### Session Management
+
+- **Turn-based Sessions**: Each query gets isolated session context
+- **Memory Persistence**: Maintains conversation history across turns
+- **Meeting Catalog**: Provides temporal context for query understanding
+
+## 🚢 Deployment
+
+### Production Deployment
+
+**Using Gunicorn:**
+```bash
+gunicorn --config gunicorn_config.py web_app:app
 ```
 
-## Development Notes
+**Docker deployment:**
+```bash
+# Build container
+docker build -t rag-system .
 
-- The system uses OpenAI API for embeddings - ensure `.env` has `OPENAI_API_KEY`
-- The `Astar_RAG_System/` directory appears to be a duplicate/backup - main code is in `src/`
-- The `rubbishBin/` directory contains old data - use `datademo/` for active data
-- Virtual environment is in `.venv/` (not committed)
-- Output files go to `output/` directory (not committed)
+# Run container
+docker run -p 5000:5000 rag-system
+```
 
-## Future Development Areas
+### Scaling Considerations
 
-Based on code comments and structure:
-- Retrieval system not yet implemented (settings exist: `TOP_K_SUMMARY`, `TOP_K_MEETING`, `TOP_K_CHUNK`)
-- Vector store integration (FAISS is installed but not used yet)
-- Multi-level retrieval with hierarchy navigation (Summary → Meeting → Data)
-- Graph-based retrieval using reference relationships
+- **Vector Store**: FAISS for development, Elasticsearch for production
+- **Session Storage**: In-memory for development, Redis/persistent storage for production
+- **API Rate Limiting**: Implement request throttling for OpenAI API calls
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with tests
+4. Submit a pull request
+
+### Development Guidelines
+
+- Follow the existing code structure and naming conventions
+- Add unit tests for new components
+- Update documentation for API changes
+- Test with both command-line and web interfaces
+
+## 📝 License
+
+[Specify your license here]
+
+## 📧 Contact
+
+[Your contact information]
+
+---
+
+## 🔄 Recent Updates
+
+- **Multi-Agent Architecture**: Implemented Google ADK agents for query rewriting and answer generation
+- **Session Management**: Added persistent conversation context across queries
+- **Hybrid Search**: Combined vector and BM25 retrieval for improved accuracy
+- **Web Interface**: Clean, responsive UI for easy querying
+- **Hierarchical Chunking**: Semantic-aware text splitting with overlap preservation
+
+For detailed implementation notes, see the component-specific documentation in each module's docstrings.
