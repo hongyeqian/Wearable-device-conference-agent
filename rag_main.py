@@ -16,9 +16,10 @@ if "SSL_CERT_FILE" in os.environ:
 import sys
 import argparse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Set
+import uuid
 
 # Add project root to path
 project_root = Path(__file__).parent
@@ -27,10 +28,14 @@ sys.path.insert(0, str(project_root))
 from src.data_loader.loader import DataLoader
 from src.chunking.chunker import HierarchicalChunker
 from src.retrieval.vector_store import HybridSearchVectorStore
+from src.retrieval.vector_store_utils import VectorStoreUtilsMixin
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
 from src.retrieval.rag_pipeline import RAGPipeline
-from config.settings import DATA_DIR
+from config.settings import DATA_DIR, VECTOR_STORE_DIR
 from src.retrieval import query_rewriter_muti_agent
+from config.settings import shared_session_service, APP_NAME, TURN_SESSION_INITIAL_STATE, USER_ID
+import asyncio
+from src.retrieval.orchestrator import handle_user_query
 
 # 全局会议目录字符串，由 rag_main 初始化时填充
 MEETING_CATALOG: str = ""
@@ -82,7 +87,7 @@ def set_meetings(meetings: List[Any]) -> None:
 def save_chunks_to_file(
     query: str,
     chunks_used: List[Dict[str, Any]],
-    output_dir: Path = None,
+    output_dir: Optional[Path] = None,
     save_original_rank: bool = False
 ) -> List[Path]:
     """
@@ -212,16 +217,19 @@ def _write_chunks_file(
 
 
 def initialize_rag_system(
-    data_dir: Path = None,
+    data_dir: Optional[Path] = None,
     include_chunk_level: bool = False
 ) -> RAGPipeline:
     """
-    Initialize the complete RAG system.
-    
+    Initialize the complete RAG system with incremental processing support.
+
+    For existing vector stores, only processes new meetings.
+    For new systems, processes all meetings.
+
     Args:
         data_dir: Path to data directory (defaults to DATA_DIR from config)
         include_chunk_level: Whether to include chunk level (default: False)
-        
+
     Returns:
         Initialized RAGPipeline instance
     """
@@ -238,59 +246,119 @@ def initialize_rag_system(
     print("Initializing RAG System")
     print("=" * 80)
     
-    # Step 1: Load data
+    # Step 1: Load all meetings from data directory
     print("\n[Step 1] Loading meeting data...")
     loader = DataLoader(data_dir)
-    meetings = loader.load_all_meetings()
-    print(f"Loaded {len(meetings)} meetings")
+    all_meetings = loader.load_all_meetings()
+    print(f"Loaded {len(all_meetings)} meetings from data directory")
 
-    if not meetings:
+    if not all_meetings:
         raise ValueError("No meetings found. Please check your data directory.")
 
-    # ★ 把 meetings 列表注册给 rewriter，用于 prompt 里的 MEETING CATALOG
-    #query_rewriter.set_meetings(meetings)
-    query_rewriter_muti_agent.set_meetings(meetings)
+    # Step 2: Check for existing vector store
+    print("\n[Step 2] Checking for existing vector store...")
+    vector_store = None
+    processed_meeting_ids: Set[str] = set()
 
-    # Step 2: Chunk meetings
-    print("\n[Step 2] Chunking meetings...")
-    chunker = HierarchicalChunker()
-    all_chunks = chunker.chunk_all_levels(meetings, include_chunk_level=include_chunk_level)
-    
-    for level, chunks in all_chunks.items():
-        print(f"  {level:10s}: {len(chunks):4d} chunks")
-    
-    # Step 3: Initialize vector store
-    print("\n[Step 3] Initializing vector store...")
-    vector_store = HybridSearchVectorStore()
-    
-    # Step 4: Add chunks to vector store
-    print("\n[Step 4] Adding chunks to vector store...")
-    for level in ['metadata', 'summary', 'meeting']:
-        chunks = all_chunks.get(level, [])
-        if chunks:
-            vector_store.add_chunks(
-                chunks=chunks,
-                Level=level,
-                generate_embedding=True
-            )
-            print(f"Added {len(chunks)} chunks to {level} level")
-    
-    # Step 5: Create retriever
-    print("\n[Step 5] Creating hierarchical retriever...")
+    if VECTOR_STORE_DIR.exists():
+        try:
+            print(f"Found existing vector store at {VECTOR_STORE_DIR}")
+            print("Loading existing vector store...")
+            vector_store = VectorStoreUtilsMixin.load(VECTOR_STORE_DIR)
+            processed_meeting_ids = vector_store.get_processed_meeting_ids()
+            print(f"Loaded existing vector store with {len(processed_meeting_ids)} processed meetings")
+        except Exception as e:
+            print(f"Warning: Failed to load existing vector store: {e}")
+            print("Will create new vector store...")
+            vector_store = None
+            processed_meeting_ids = set()
+    else:
+        print("No existing vector store found. Will create new one.")
+
+    # Step 3: Filter to new meetings only
+    new_meetings = []
+    for meeting in all_meetings:
+        if meeting.meeting_id not in processed_meeting_ids:
+            new_meetings.append(meeting)
+
+    print(f"\nFound {len(new_meetings)} new meetings to process")
+
+    if new_meetings:
+        # Step 4: Process new meetings
+        print("\n[Step 4] Processing new meetings...")
+
+        # Chunk new meetings
+        print("  Chunking new meetings...")
+        chunker = HierarchicalChunker()
+        new_chunks = chunker.chunk_all_levels(new_meetings, include_chunk_level=include_chunk_level)
+
+        for level, chunks in new_chunks.items():
+            print(f"    {level:10s}: {len(chunks):4d} chunks")
+
+        # Initialize vector store if needed
+        if vector_store is None:
+            print("  Creating new vector store...")
+            vector_store = VectorStoreUtilsMixin()
+        else:
+            print("  Using existing vector store...")
+
+        # Add new chunks to vector store
+        print("  Adding new chunks to vector store...")
+        for level in ['metadata', 'summary', 'meeting']:
+            chunks = new_chunks.get(level, [])
+            if chunks:
+                vector_store.add_chunks(
+                    chunks=chunks,
+                    Level=level,
+                    generate_embedding=True
+                )
+                print(f"    Added {len(chunks)} chunks to {level} level")
+
+        # Save updated vector store
+        print("  Saving updated vector store...")
+        vector_store.save(VECTOR_STORE_DIR)
+        print(f"  Vector store saved to {VECTOR_STORE_DIR}")
+
+    else:
+        print("\n[Step 4] No new meetings to process")
+        if vector_store is None:
+            raise ValueError("No existing vector store and no new meetings to process.")
+
+    # Step 5: Register all meetings with query rewriter (for MEETING_CATALOG)
+    print("\n[Step 5] Registering meetings with query rewriter...")
+    query_rewriter_muti_agent.set_meetings(all_meetings)
+
+    print("DEBUG: loaded meetings count:", len(all_meetings))
+    for m in all_meetings:
+        print("DEBUG: meeting datetime:", getattr(m, "datetime", None))
+    import src.retrieval.query_rewriter_muti_agent as qrm
+    print("DEBUG: MEETING_CATALOG preview:\n", qrm.MEETING_CATALOG[:1000])
+
+    # Step 6: Create retriever
+    print("\n[Step 6] Creating hierarchical retriever...")
     retriever = HierarchicalRetriever(vector_store)
-    
-    # Step 6: Create RAG pipeline
-    print("\n[Step 6] Creating RAG pipeline...")
+
+    # Step 7: Create RAG pipeline
+    print("\n[Step 7] Creating RAG pipeline...")
     from src.retrieval.answer_generator_muti_agent import AnswerGeneratorMultiAgent
-    answer_generator = AnswerGeneratorMultiAgent()
+    from src.retrieval.query_rewriter_muti_agent import QueryRewriter
+
+    # Construct agents using unified session keys from config.settings
+    answer_generator = AnswerGeneratorMultiAgent(session_service=shared_session_service, user_id=USER_ID, app_name=APP_NAME)
+    query_rewriter = QueryRewriter(session_service=shared_session_service, user_id=USER_ID, app_name=APP_NAME)
+
     pipeline = RAGPipeline(
         retriever=retriever,
         answer_generator=answer_generator,
+        query_rewriter=query_rewriter,
         use_query_rewriter=True
     )
     
     print("\n" + "=" * 80)
     print("RAG System Initialized Successfully!")
+    print(f"Total meetings available: {len(all_meetings)}")
+    print(f"Processed meetings: {len(processed_meeting_ids)}")
+    print(f"New meetings processed: {len(new_meetings)}")
     print("=" * 80)
     
     return pipeline
@@ -310,6 +378,8 @@ def interactive_mode(pipeline: RAGPipeline):
     print("  - 'config' to show current configuration")
     print("  - 'save_original_rank' to toggle saving original rank version (currently: OFF)")
     print("=" * 80)
+    
+    
     
     while True:
         try:
@@ -340,13 +410,12 @@ def interactive_mode(pipeline: RAGPipeline):
             print(f"Processing query: {query}")
             print("-" * 80)
             
-            result = pipeline.query(
+            # 使用 orchestrator 处理查询，每个查询都有独立的 session 生命周期
+            result = asyncio.run(handle_user_query(
                 user_query=query,
-                top_k_vector=5,
-                top_k_bm25=20,
-                num_paraphrases=2,
-                max_chunks_for_answer=15
-            )
+                meeting_catalog=query_rewriter_muti_agent.MEETING_CATALOG,
+                rag_pipeline=pipeline
+            ))
             
             # Save chunks to file
             try:
@@ -388,24 +457,24 @@ def single_query_mode(
     top_k_bm25: int = 20,
     num_paraphrases: int = 2,
     max_chunks: int = 15,
-    verbose: bool = False
+    verbose: bool = False,
+    save_original_rank: bool = False
 ):
     """Run RAG system for a single query."""
     print("\n" + "=" * 80)
     print(f"Query: {query}")
     print("=" * 80)
     
-    result = pipeline.query(
+    # 使用 orchestrator 处理单次查询
+    result = asyncio.run(handle_user_query(
         user_query=query,
-        top_k_vector=top_k_vector,
-        top_k_bm25=top_k_bm25,
-        num_paraphrases=num_paraphrases,
-        max_chunks_for_answer=max_chunks
-    )
+        meeting_catalog=query_rewriter_muti_agent.MEETING_CATALOG,
+        rag_pipeline=pipeline
+    ))
     
     # Save chunks to file
     try:
-        output_files = save_chunks_to_file(query, result['chunks_used'])
+        output_files = save_chunks_to_file(query, result['chunks_used'], save_original_rank=save_original_rank)
         print(f"\nSaved chunks to: {', '.join([str(f) for f in output_files])}")
     except Exception as e:
         print(f"\n⚠️  Warning: Failed to save chunks: {e}")
