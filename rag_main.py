@@ -42,11 +42,6 @@ MEETING_CATALOG: str = ""
 
 
 def set_meetings(meetings: List[Any]) -> None:
-    """
-    由 rag_main 在系统初始化时调用，
-    把 loader.load_all_meetings() 的结果转换成一个简短的“会议目录”文本，
-    用于提供给 LLM 作为上下文。
-    """
     global MEETING_CATALOG
     lines: List[str] = []
 
@@ -58,7 +53,7 @@ def set_meetings(meetings: List[Any]) -> None:
             date_str = dt_raw.date().isoformat()
         elif isinstance(dt_raw, str):
             try:
-                # 支持 "2025-11-30T20:21:00+08:00" 或 "2025-11-30"
+                # support "2025-11-30T20:21:00+08:00" or "2025-11-30"
                 text = dt_raw.strip().replace("+08:00", "")
                 if "T" in text:
                     d = datetime.fromisoformat(text).date()
@@ -68,7 +63,7 @@ def set_meetings(meetings: List[Any]) -> None:
             except Exception:
                 pass
 
-        # participants（只拿 name）
+        # participants (only take name)
         names: List[str] = []
         for p in getattr(m, "participants", []):
             if isinstance(p, dict):
@@ -410,7 +405,7 @@ def interactive_mode(pipeline: RAGPipeline):
             print(f"Processing query: {query}")
             print("-" * 80)
             
-            # 使用 orchestrator 处理查询，每个查询都有独立的 session 生命周期
+            # use orchestrator to process query, each query has independent session lifecycle
             result = asyncio.run(handle_user_query(
                 user_query=query,
                 meeting_catalog=query_rewriter_muti_agent.MEETING_CATALOG,
@@ -465,7 +460,7 @@ def single_query_mode(
     print(f"Query: {query}")
     print("=" * 80)
     
-    # 使用 orchestrator 处理单次查询
+    # use orchestrator to process single query
     result = asyncio.run(handle_user_query(
         user_query=query,
         meeting_catalog=query_rewriter_muti_agent.MEETING_CATALOG,
