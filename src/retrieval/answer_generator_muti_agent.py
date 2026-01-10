@@ -8,8 +8,11 @@ from google.adk.models import LiteLlm
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
+from google.adk.errors.already_exists_error import AlreadyExistsError
 
 from config.settings import OPENAI_API_KEY, OPENAI_MODEL
+from config.settings import shared_session_service
+import uuid
 
 
 # for time parsing and filtering
@@ -94,7 +97,7 @@ def filter_chunks_by_time(
 
 def format_context_for_answer(chunks: List[Dict[str, Any]], max_chunks: int = 15) -> str:
     """
-    输出形式大致如下：
+    form like this：
     [data012_summary_1] (Date: 2025-11-29)
     <chunk text>
 
@@ -121,15 +124,47 @@ def format_context_for_answer(chunks: List[Dict[str, Any]], max_chunks: int = 15
 
 
 
-llm_model_answer = LiteLlm(
-    model=OPENAI_MODEL or "gpt-4o",
-    api_key=OPENAI_API_KEY,
-)
 
-answer_agent = LlmAgent(
-    name="AnswerSynthesisAgent",
-    model=llm_model_answer,
-    instruction=r"""
+
+
+class AnswerGeneratorMultiAgent:
+    """
+    Multi-agent answer generator， API：
+        generate_answer(user_query, chunks, query_rewrite, max_chunks=15) -> dict
+    return：
+        {
+            "answer": str,
+            "chunks_used": List[Dict],
+            "num_chunks": int,
+        }
+    """
+
+    def __init__(
+        self,
+        app_name: str = "answer_agents",
+        user_id: str = "u-answer",
+        session_id_prefix: str = "answer-",
+        session_service = shared_session_service,
+    ):
+        self.app_name = app_name
+        self.user_id = user_id
+        self.session_id_prefix = session_id_prefix
+        self.session_service = session_service
+
+        # initial Answer Agent
+        self._init_agent()
+
+    def _init_agent(self):
+        """初始化 Answer Agent"""
+        llm_model_answer = LiteLlm(
+            model=OPENAI_MODEL or "gpt-4o",
+            api_key=OPENAI_API_KEY,
+        )
+
+        self.answer_agent = LlmAgent(
+            name="AnswerSynthesisAgent",
+            model=llm_model_answer,
+            instruction=r"""
 You are the answer generation agent of a meeting-based RAG system.
 
 You will receive a single user question and a context made of multiple chunks.
@@ -159,35 +194,9 @@ Output:
 - Only the final answer text with inline citations using [chunk_id].
 - No JSON. No markdown formatting like bullet lists unless it helps clarity.
 """,
-    output_key="answer_text",
-    include_contents="none",
-)
-
-
-
-
-class AnswerGeneratorMultiAgent:
-    """
-    Multi-agent answer generator，对外 API：
-        generate_answer(user_query, chunks, query_rewrite, max_chunks=15) -> dict
-    返回：
-        {
-            "answer": str,
-            "chunks_used": List[Dict],
-            "num_chunks": int,
-        }
-    """
-
-    def __init__(
-        self,
-        app_name: str = "answer_agents",
-        user_id: str = "u-answer",
-        session_id_prefix: str = "answer-",
-    ):
-        self.app_name = app_name
-        self.user_id = user_id
-        self.session_id_prefix = session_id_prefix
-        self.session_service = InMemorySessionService()
+            output_key="answer_text",
+            include_contents="none",
+        )
 
     async def _generate_answer_async(
         self,
@@ -196,27 +205,32 @@ class AnswerGeneratorMultiAgent:
         query_rewrite: Dict[str, Any],
         max_chunks: int = 15,
     ) -> Dict[str, Any]:
-        import uuid
+        # Require orchestrator-managed turn_session_id
+        session_id = None
+        if isinstance(query_rewrite, dict):
+            session_id = query_rewrite.get("turn_session_id")
+        if not session_id:
+            raise ValueError("turn_session_id is required. Orchestrator must create/manage the session lifecycle.")
 
-        session_id = f"{self.session_id_prefix}{uuid.uuid4().hex[:8]}"
+        # Read existing session; rewriter/orchestrator must have created it
+        try:
+            session = await self.session_service.get_session(app_name=self.app_name, user_id=self.user_id, session_id=session_id)
+        except Exception as e:
+            raise RuntimeError(f"Session retrieval failed for session_id={session_id}. Orchestrator must create it before calling answer generator.") from e
+        if session is None:
+            raise RuntimeError(f"Session not found for session_id={session_id}. Orchestrator must create it before calling answer generator.")
 
-        # 1) 时间筛选
+        # ensure turn_memory field exists
+        session.state.setdefault("turn_memory", [])
+        session.state["user_query"] = user_query
+
+        # 1) filter time
         filtered_chunks = filter_chunks_by_time(chunks, query_rewrite, max_chunks=max_chunks)
-
-        # 2) 构造上下文
+        # 2) construct memory
         context_str = format_context_for_answer(filtered_chunks, max_chunks=max_chunks)
         chunks_used = filtered_chunks[:max_chunks]
 
-        # 3) 创建 session，填初始 state
-        session = await self.session_service.create_session(
-            app_name=self.app_name,
-            user_id=self.user_id,
-            session_id=session_id,
-        )
-        session.state["user_query"] = user_query
-        session.state["context"] = context_str
-
-        # 4) 构造 user content 给 LlmAgent
+        # 4) construct user content to LlmAgent
         user_content_text = f"""Question:
 {user_query}
 
@@ -232,7 +246,7 @@ Remember to cite chunks by their chunk_id in square brackets, like [data012_summ
         )
 
         runner = Runner(
-            agent=answer_agent,
+            agent=self.answer_agent,
             app_name=self.app_name,
             session_service=self.session_service,
         )
@@ -249,12 +263,33 @@ Remember to cite chunks by their chunk_id in square brackets, like [data012_summ
             user_id=self.user_id,
             session_id=session_id,
         )
+        if final_session is None:
+            raise RuntimeError(f"Session not found after runner for session_id={session_id}.")
         answer_text = final_session.state.get("answer_text") or "I couldn't generate an answer."
 
+        # append QA pair into the same turn session's turn_memory
+        entries = session.state.get("turn_memory", []) or []
+
+        entry = {
+            "id": f"m-{uuid.uuid4().hex[:8]}",
+            "type": "dialog_fact",
+            "content": f"Q: {user_query}\nA: {answer_text}",
+            "participants": (query_rewrite or {}).get("entities", {}).get("people", []),
+            "dates": (query_rewrite or {}).get("entities", {}).get("time", []),
+            "source_chunk_ids": [c.get("chunk_id") for c in chunks_used or []],
+            "created_at": datetime.utcnow().isoformat(),
+            "importance": 0.6,
+        }
+        entries.append(entry)
+        session.state["turn_memory"] = entries
+
+        # Do NOT delete/create session here. Return updated session.state for orchestrator to persist if needed.
         return {
             "answer": answer_text,
             "chunks_used": chunks_used,
             "num_chunks": len(chunks_used),
+            "turn_session_id": session_id,
+            "session_state": session.state,
         }
 
     def generate_answer(
@@ -264,6 +299,8 @@ Remember to cite chunks by their chunk_id in square brackets, like [data012_summ
         query_rewrite: Dict[str, Any],
         max_chunks: int = 15,
     ) -> Dict[str, Any]:
+        if not isinstance(query_rewrite, dict) or not query_rewrite.get("turn_session_id"):
+            raise ValueError("query_rewrite must contain 'turn_session_id'")
         return asyncio.run(
             self._generate_answer_async(
                 user_query=user_query,
@@ -272,5 +309,3 @@ Remember to cite chunks by their chunk_id in square brackets, like [data012_summ
                 max_chunks=max_chunks,
             )
         )
-        
-        

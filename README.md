@@ -6,41 +6,25 @@ A sophisticated Retrieval-Augmented Generation (RAG) system designed for queryin
 
 ### Core Components
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Data Layer    │    │ Retrieval Layer │    │   Query Layer   │
-│                 │    │                 │    │                 │
-│ • DataLoader    │    │ • Vector Store  │    │ • Query Rewriter│
-│ • Hierarchical  │    │ • Hybrid Search │    │ • Answer Gen.   │
-│   Chunker       │    │ • Hierarchical  │    │ • Orchestrator  │
-│ • Embeddings    │    │   Retriever     │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │   Web Interface │
-                    │                 │
-                    │ • Flask App     │
-                    │ • REST API      │
-                    │ • Session Mgmt  │
-                    └─────────────────┘
-```
+![RAG System Log](README.assets/RAG System Log.png)
+
 
 ### Data Processing Pipeline
 
-1. **Data Loading**: Loads meeting transcripts, metadata, summaries, and structured content from `datademo/` directory
-2. **Hierarchical Chunking**: Processes content at three levels (metadata, summary, meeting) with semantic-aware splitting
-3. **Embedding Generation**: Converts text chunks to vector embeddings using OpenAI's embedding models
-4. **Vector Storage**: Stores embeddings in FAISS with hybrid search capabilities (vector + BM25)
+1. **Data Loading**: Loads meeting transcripts, metadata, summaries from `datademo/` directory
+2. **Hierarchical Chunking**: Processes content at three levels (metadata, summary, meeting) with semantic-aware splitting and overlap preservation
+3. **Embedding Generation**: Converts text chunks to vector embeddings using OpenAI's text-embedding models
+4. **Vector Storage**: Stores embeddings in FAISS with hybrid search capabilities (vector similarity + BM25 keyword search)
+5. **Index Persistence**: Saves FAISS indices and BM25 data structures for efficient retrieval
 
 ### Query Processing Flow
 
 ```
 User Query → Query Rewriter → Hierarchical Retrieval → Answer Generation → Response
      ↓              ↓              ↓                      ↓
-  Raw Text    Multi-Agent       Hybrid Search       Multi-Agent
+  Raw Text    Multi-Agent       Hybrid Search       Answer-Agent
              Processing       (Vector + BM25)       Generation
+                             Score Fusion          Citations
 ```
 
 ## 🚀 Key Features
@@ -52,7 +36,7 @@ User Query → Query Rewriter → Hierarchical Retrieval → Answer Generation �
 
 ### Advanced Query Processing
 - **Multi-Agent Query Rewriter**: Uses Google ADK agents for intelligent query normalization and paraphrasing
-- **Session Management**: Maintains conversation context across multiple queries
+- **Session Management**: Maintains conversation context across multiple queries (have bugs, agents memory state have some issues)
 - **Meeting Catalog Integration**: Provides temporal and participant context for query understanding
 
 ### Hybrid Search Technology
@@ -60,47 +44,64 @@ User Query → Query Rewriter → Hierarchical Retrieval → Answer Generation �
 - **BM25 Search**: Keyword-based retrieval for precise matching
 - **Score Fusion**: Combines vector and BM25 scores for optimal ranking
 
-### Web Interface
-- **Gemini-like UI**: Clean, intuitive interface for querying
+### Web Interface & Agents
+- **Google ADK Integration**: Advanced agent-based query processing
+- **Session Management**: Persistent conversation context using Google ADK
 - **REST API**: Programmatic access via `/api/query` endpoint
 - **Health Monitoring**: System status and pipeline initialization checks
+
+### Content Generation Tools
+- **Structured Summaries**: Generate hierarchical meeting summaries with JSON and markdown output (Ankit need structure)
+- **Detailed Reports**: Create comprehensive meeting reports with action items (Ankit need structure)
+- **Metadata Generation**: Extract and structure meeting metadata
+- **Meeting Level Processing**: Generate topic-level content breakdowns
+- **Summary Level Processing**: Generate summary - level content breakdowns
 
 ## 📁 Project Structure
 
 ```
 ├── config/
-│   ├── settings.py          # Configuration and API keys
-│   └── requirements.txt     # Python dependencies
+│   ├── settings.py              # Configuration and API keys
+│   └── requirements.txt         # Python dependencies
 ├── src/
 │   ├── data_loader/
-│   │   └── loader.py        # Meeting data loading and parsing
+│   │   └── loader.py            # Meeting data loading and parsing
 │   ├── chunking/
-│   │   └── chunker.py       # Hierarchical text chunking
+│   │   └── chunker.py           # Hierarchical text chunking
 │   ├── embeddings/
-│   │   └── generator.py     # OpenAI embedding generation
+│   │   └── generator.py         # OpenAI embedding generation
 │   └── retrieval/
-│       ├── vector_store.py      # FAISS + BM25 hybrid search
-│       ├── hierarchical_retriever.py
-│       ├── rag_pipeline.py      # Main RAG pipeline orchestration
-│       ├── orchestrator.py      # Query handling and session management
-│       ├── query_rewriter_muti_agent.py  # Multi-agent query rewriting
-│       └── answer_generator_muti_agent.py # Multi-agent answer generation
-├── datademo/                # Meeting data (con*/ directories)
-├── vector_store/            # FAISS indices and BM25 data
-├── outputs/                 # Query results and evaluation data
-├── templates/
-│   └── index.html          # Web interface template
-├── tests/                   # Unit tests and debugging tools
-├── rag_main.py             # Command-line interface
-├── web_app.py              # Flask web application
-└── requirements.txt        # Project dependencies
+│       ├── vector_store.py          # FAISS + BM25 hybrid search
+│       ├── vector_store_utils.py    # Vector store utilities
+│       ├── hierarchical_retriever.py # Hierarchical retrieval logic
+│       ├── rag_pipeline.py          # Main RAG pipeline orchestration
+│       ├── orchestrator.py          # Query handling and session management
+│       ├── query_rewriter_muti_agent.py    # Multi-agent query rewriting
+│       ├── answer_generator_muti_agent.py  # Multi-agent answer generation
+│       └── vector_store_es.py       # Elasticsearch vector store (alternative,not using now)
+├── datademo/                    # Meeting data (con*/ directories)
+├── vector_store/                # FAISS indices and BM25 data
+│   ├── faiss/                   # FAISS vector indices
+│   └── pickle/                  # Serialized BM25 and mapping data
+├── generate/                    # Content generation scripts
+│   ├── generate_summary.py          # Generate meeting summaries
+│   ├── generate_structured_summary.py # Generate structured summaries (Ankit need)
+│   ├── generate_detailed_report.py   # Generate detailed reports (Ankit need)
+│   ├── generate_meetLevel.py         # Generate meeting level content
+│   ├── generate_metaData.py          # Generate metadata
+│   └── generate_transcript.py        # Generate transcripts
+├── web_app/
+│   └── agent.py                # Google ADK agent implementation, Google adk web interface
+├── rag_main.py                 # Command-line interface
+└── requirements.txt            # Project dependencies
 ```
 
 ## 🛠️ Installation & Setup
 
 ### Prerequisites
 - Python 3.8+
-- OpenAI API key
+- OpenAI API key (set in the environment)
+- Google ADK credentials (for agent-based features)
 - Elasticsearch (optional, for alternative vector storage)
 
 ### Environment Setup
@@ -125,12 +126,17 @@ User Query → Query Rewriter → Hierarchical Retrieval → Answer Generation �
    ```
 
 4. **Configure environment variables:**
-   Create a `.env` file in the `config/` directory:
+   Create a `.env` file in the `config/` directory: (we already have one, but you need set your own config)
+   
    ```env
    OPENAI_API_KEY=your_openai_api_key_here
    OPENAI_MODEL=gpt-4  # or gpt-3.5-turbo
    EMBEDDING_MODEL=text-embedding-3-small
-
+   
+   # Google ADK configuration (if using agent features)
+   GOOGLE_ADK_PROJECT=your_google_cloud_project
+   GOOGLE_ADK_LOCATION=your_location
+   
    # Optional Elasticsearch configuration
    ELASTICSEARCH_URL=http://localhost:9200
    ELASTICSEARCH_USERNAME=your_username
@@ -160,28 +166,37 @@ python rag_main.py --query "Who discussed the budget?" \
   --save-original-rank
 ```
 
-### Web Application
+### Content Generation Scripts
 
-**Start the web server:**
+**Generate structured meeting summaries (Ankit need):**
+
 ```bash
-python web_app.py
+# Generate summary for specific files
+python generate/generate_structured_summary.py --start data001 --end data013
+
+# Generate summary for single file
+python generate/generate_structured_summary.py --start data014 --end data014
 ```
 
-Access the interface at `http://localhost:5000`
+**Generate detailed meeting reports: (Ankit need)**
 
-### API Usage
-
-**Query endpoint:**
 ```bash
-curl -X POST http://localhost:5000/api/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What action items were assigned?"}'
+python generate/generate_detailed_report.py --start data001 --end data013
 ```
 
-**Health check:**
-```bash
-curl http://localhost:5000/api/health
-```
+
+
+### Google ADK Integration
+
+The system integrates with Google ADK for advanced agent-based query processing:
+
+- **Agent-based Interface**: Uses Google ADK agents for intelligent query handling
+- **Session Persistence**: Maintains conversation context across interactions
+- **Very powerful framework**: https://google.github.io/adk-docs/
+
+### API Usage (if available)
+
+For programmatic access, the system can be integrated with Google ADK workflows or custom API endpoints.
 
 ## 🔧 Configuration
 
@@ -190,6 +205,7 @@ Key settings in `config/settings.py`:
 ```python
 # Data and model configuration
 DATA_DIR = PROJECT_ROOT / "datademo"
+VECTOR_STORE_DIR = PROJECT_ROOT / "vector_store"
 EMBEDDING_MODEL = "text-embedding-3-small"
 OPENAI_MODEL = "gpt-4"
 
@@ -202,9 +218,10 @@ ONLY_SUMMARY = True  # Focus on summary and meeting levels
 TOP_K_VECTOR = 5    # Vector search results per query
 TOP_K_BM25 = 20     # BM25 search results per query
 
-# Session management
+# Session management (Google ADK)
 APP_NAME = "agents"
 USER_ID = "u-main"
+TURN_SESSION_INITIAL_STATE = {}  # Initial session state
 ```
 
 ## 📊 Data Format
@@ -225,36 +242,16 @@ Each meeting resides in a `datademo/conXXX/` directory with:
 3. **Meeting Level**: Detailed topic and action item breakdowns
 
 ## 🧪 Testing & Evaluation
-
-### Running Tests
-
-```bash
-# Export chunking results for analysis
-python tests/test_chunking_export.py
-
-# Test retrieval components
-python tests/test_retrieve.py
-
-# Debug timestamp parsing
-python tests/debug_timestamps.py
-```
-
-### Evaluation Scripts
-
-```bash
-# Generate evaluation reports
-python generate/evaluation_script.py
-
-# Results saved to outputs/evaluation_results_*.txt
-```
+Will updated in the future
 
 ## 🔍 Advanced Features
 
 ### Multi-Agent Architecture
 
-- **Query Rewriter**: Normalizes queries, extracts entities, generates paraphrases
-- **Answer Generator**: Produces context-aware responses with citations
-- **Session Service**: Maintains conversation state using Google ADK
+- **Query Rewriter**: Multi-agent system that normalizes queries, extracts entities, and generates paraphrases
+- **Answer Generator**: Answer agent system that produces context-aware responses with citations
+- **Session Service**: Google ADK-powered session management for conversation persistence
+- **FullRAGSystemAgent**: Integrated Google ADK agent for complete RAG pipeline orchestration
 
 ### Hybrid Retrieval Strategy
 
@@ -268,8 +265,7 @@ The system combines multiple retrieval techniques:
 ### Session Management
 
 - **Turn-based Sessions**: Each query gets isolated session context
-- **Memory Persistence**: Maintains conversation history across turns
-- **Meeting Catalog**: Provides temporal context for query understanding
+- **Memory Persistence**: Maintains conversation history across one turn (**long-term memory** will be generated in the future)
 
 ## 🚢 Deployment
 
@@ -289,10 +285,13 @@ docker build -t rag-system .
 docker run -p 5000:5000 rag-system
 ```
 
+this will be deployed on Amazon web console or Google, have not implement yet.
+
 ### Scaling Considerations
 
-- **Vector Store**: FAISS for development, Elasticsearch for production
-- **Session Storage**: In-memory for development, Redis/persistent storage for production
+- **Vector Store**: FAISS for development now
+- **Session Storage**: Google ADK session management with cloud persistence
+- **Agent Orchestration**: Google ADK for scalable agent-based processing
 - **API Rate Limiting**: Implement request throttling for OpenAI API calls
 
 ## 🤝 Contributing
@@ -301,6 +300,7 @@ docker run -p 5000:5000 rag-system
 2. Create a feature branch
 3. Make your changes with tests
 4. Submit a pull request
+5. Thanks to Astar IHPC
 
 ### Development Guidelines
 
@@ -321,10 +321,11 @@ docker run -p 5000:5000 rag-system
 
 ## 🔄 Recent Updates
 
-- **Multi-Agent Architecture**: Implemented Google ADK agents for query rewriting and answer generation
-- **Session Management**: Added persistent conversation context across queries
-- **Hybrid Search**: Combined vector and BM25 retrieval for improved accuracy
-- **Web Interface**: Clean, responsive UI for easy querying
-- **Hierarchical Chunking**: Semantic-aware text splitting with overlap preservation
+- **Google ADK Integration**: Complete migration to Google ADK agent-based architecture
+- **Multi-Agent Query Processing**: Enhanced query rewriting and answer generation with multiple specialized agents
+- **Session Persistence**: Robust conversation context management using Google ADK
+- **Content Generation Suite**: Comprehensive tools for structured summaries, detailed reports, and metadata generation
+- **Hybrid Retrieval System**: Optimized vector + BM25 search with hierarchical ranking
+- **Modular Architecture**: Clean separation of data loading, chunking, embedding, and retrieval components
 
-For detailed implementation notes, see the component-specific documentation in each module's docstrings.
+For detailed implementation notes, see our development log: https://docs.google.com/document/d/1bM-uNABov4zaLEQbwsCUuPIePig0YhFNd4s-aKx46x4/edit?tab=t.0

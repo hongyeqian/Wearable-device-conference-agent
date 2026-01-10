@@ -3,6 +3,11 @@ import re
 from pathlib import Path
 from openai import OpenAI
 
+
+# 在导入OpenAI之前取消设置SSL_CERT_FILE
+if 'SSL_CERT_FILE' in os.environ:
+    del os.environ['SSL_CERT_FILE']
+
 client = OpenAI() 
 
 

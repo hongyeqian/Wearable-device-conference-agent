@@ -11,11 +11,17 @@ from typing import Dict, Any, Optional, List, Tuple
 from pydantic import BaseModel, Field
 
 # Add project root to path
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from openai import OpenAI
 from config.settings import OPENAI_API_KEY
+
+
+import os
+if "SSL_CERT_FILE" in os.environ:
+    del os.environ["SSL_CERT_FILE"]
+
 
 # Pydantic model for structured JSON output
 class BulletPoint(BaseModel):

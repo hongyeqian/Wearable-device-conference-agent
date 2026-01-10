@@ -2,7 +2,7 @@
 Utility functions for HybridSearchVectorStore
 Provides save/load, statistics, and clear functionality
 """
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 from pathlib import Path
 import pickle
 import faiss
@@ -47,7 +47,22 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
             }
         
         return stats
-    
+
+    def get_processed_meeting_ids(self) -> Set[str]:
+        """
+        Get set of meeting IDs that have been processed and stored in the vector store.
+
+        Returns:
+            Set of processed meeting IDs
+        """
+        processed_meeting_ids = set()
+
+        #extract meeting ids from summary level
+        processed_meeting_ids.update(self.meeting_id_to_summary_indices.keys())
+
+        # can also extract meeting ids from metadata and meeting level, but summary level should be enough
+        return processed_meeting_ids
+
     def clear(self, level: Optional[str] = None):
         """
         Clear indices for a specific level or all levels
@@ -124,6 +139,18 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
         with open(tokenized_file, 'wb') as f:
             pickle.dump(self.doc_text_tokenized, f)
         print(f"  ✅ Saved doc_text_tokenized")
+
+        # Save meeting_id_to_summary_indices
+        meeting_indices_file = pickle_dir / "meeting_id_to_summary_indices.pkl"
+        with open(meeting_indices_file, 'wb') as f:
+            pickle.dump(self.meeting_id_to_summary_indices, f)
+        print(f"  ✅ Saved meeting_id_to_summary_indices")
+
+        # Save entry_id_to_meeting_indices
+        entry_indices_file = pickle_dir / "entry_id_to_meeting_indices.pkl"
+        with open(entry_indices_file, 'wb') as f:
+            pickle.dump(self.entry_id_to_meeting_indices, f)
+        print(f"  ✅ Saved entry_id_to_meeting_indices")
         
         # Save metadata (alpha, embedding_dim)
         metadata_file = pickle_dir / "metadata.pkl"
@@ -217,6 +244,20 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
                 instance.doc_text_tokenized = pickle.load(f)
             total_tokenized = sum(len(docs) for docs in instance.doc_text_tokenized.values())
             print(f"  ✅ Loaded doc_text_tokenized ({total_tokenized} documents)")
+
+        # Load meeting_id_to_summary_indices
+        meeting_indices_file = pickle_dir / "meeting_id_to_summary_indices.pkl"
+        if meeting_indices_file.exists():
+            with open(meeting_indices_file, 'rb') as f:
+                instance.meeting_id_to_summary_indices = pickle.load(f)
+            print(f"  ✅ Loaded meeting_id_to_summary_indices ({len(instance.meeting_id_to_summary_indices)} meeting IDs)")
+
+        # Load entry_id_to_meeting_indices
+        entry_indices_file = pickle_dir / "entry_id_to_meeting_indices.pkl"
+        if entry_indices_file.exists():
+            with open(entry_indices_file, 'rb') as f:
+                instance.entry_id_to_meeting_indices = pickle.load(f)
+            print(f"  ✅ Loaded entry_id_to_meeting_indices ({len(instance.entry_id_to_meeting_indices)} entry IDs)")
         
         print(f"✅ Successfully loaded all indices from {save_dir}")
         

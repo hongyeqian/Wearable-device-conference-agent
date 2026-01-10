@@ -140,8 +140,8 @@ class FullRAGSystemAgent(BaseAgent):
         query_rewriter_muti_agent.set_meetings(all_meetings)
         self.meeting_catalog = query_rewriter_muti_agent.MEETING_CATALOG
         
-        print("DEBUG: loaded meetings count:", len(all_meetings))
-        print(f"DEBUG: MEETING_CATALOG preview:\n{self.meeting_catalog[:500]}...")
+        # print("DEBUG: loaded meetings count:", len(all_meetings))
+        # print(f"DEBUG: MEETING_CATALOG preview:\n{self.meeting_catalog[:500]}...")
 
         # Step 6: Create retriever
         print("\n[Step 6] Creating hierarchical retriever...")
@@ -154,6 +154,16 @@ class FullRAGSystemAgent(BaseAgent):
         print("\n[Step 7] Creating RAG pipeline...")
         from src.retrieval.answer_generator_muti_agent import AnswerGeneratorMultiAgent
         from src.retrieval.query_rewriter_muti_agent import QueryRewriter
+        
+        
+        query_rewriter = QueryRewriter(
+            session_service=shared_session_service, 
+            user_id=USER_ID, 
+            app_name=APP_NAME
+        )
+        
+        
+
 
         # Construct agents using unified session keys from config.settings
         answer_generator = AnswerGeneratorMultiAgent(
@@ -161,25 +171,23 @@ class FullRAGSystemAgent(BaseAgent):
             user_id=USER_ID, 
             app_name=APP_NAME
         )
-        query_rewriter = QueryRewriter(
-            session_service=shared_session_service, 
-            user_id=USER_ID, 
-            app_name=APP_NAME
-        )
-
+        
         pipeline = RAGPipeline(
             retriever=retriever,
             answer_generator=answer_generator,
             query_rewriter=query_rewriter,
             use_query_rewriter=True
         )
+
+
+
         
         print("✓ RAG pipeline created")
         
         print("\n" + "=" * 80)
-        print("🎉 RAG System Initialized Successfully!")
-        print(f"   Total meetings available: {len(all_meetings)}")
-        print(f"   Processed meetings: {len(processed_meeting_ids)}")
+        print("RAG System Initialized Successfully!")
+        print(f" Total meetings available: {len(all_meetings)}")
+        print(f" Processed meetings: {len(processed_meeting_ids)}")
         print(f"   New meetings processed: {len(new_meetings)}")
         print("=" * 80)
         
@@ -192,7 +200,7 @@ class FullRAGSystemAgent(BaseAgent):
         try:
             #delay initialization for rag pipeline
             if not self.initialized:
-                print("🔄 Initializing RAG system for first query...")
+                print("Initializing RAG system for first query...")
                 self.rag_pipeline = self._initialize_complete_rag_system()
                 self.initialized = True
             
@@ -215,12 +223,11 @@ class FullRAGSystemAgent(BaseAgent):
                 )
                 return
             
-            print(f"🔍 Processing query: {user_query[:100]}{'...' if len(user_query) > 100 else ''}")
+            print(f"Processing query: {user_query[:100]}{'...' if len(user_query) > 100 else ''}")
             
             # call complete rag logic
             result = await handle_user_query(
                 user_query=user_query,
-                meeting_catalog=self.meeting_catalog,
                 rag_pipeline=self.rag_pipeline
             )
             

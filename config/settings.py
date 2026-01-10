@@ -19,6 +19,7 @@ else:
 
 # config path, may be need
 DATA_DIR = PROJECT_ROOT / "datademo"
+VECTOR_STORE_DIR = PROJECT_ROOT / "vector_store"
 # write future path here
 # API keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -52,6 +53,29 @@ ELASTICSEARCH_TIMEOUT = int(os.getenv("ELASTICSEARCH_TIMEOUT", "30"))  # Request
 
 CURRENT_USER = "Hongye Qian"
 
+
+
+APP_NAME = os.getenv("APP_NAME", "agents")
+USER_ID = "u-main"
+
+# shared session state
+from google.adk.sessions import InMemorySessionService
+shared_session_service = InMemorySessionService()
+
+
+# Canonical initial state for a new turn session. Orchestrator should copy and fill runtime fields.
+TURN_SESSION_INITIAL_STATE = {
+    "user_query": "",
+    "CURRENT_USER": "Hongye Qian",
+    "meeting_catalog": "",
+    "now_str": "",
+    "turn_memory": [],
+    "memory_context_text": "",
+    # Optional placeholders agents may write into:
+    # "pronoun_rewrite_result": None,
+    # "time_rewrite_result": None,
+    # "structured_rewrite_result": None,
+}
 
 # following is the necessary settings for the project
 # will write future
