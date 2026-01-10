@@ -6,7 +6,7 @@ A sophisticated Retrieval-Augmented Generation (RAG) system designed for queryin
 
 ### Core Components
 
-![RAG System Log](README.assets/RAG System Log.png)
+![RAG System Log](README.assets/RAG_System_Log.png)
 
 
 ### Data Processing Pipeline
