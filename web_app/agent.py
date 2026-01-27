@@ -9,20 +9,65 @@ sys.path.insert(0, str(project_root))
 
 from src.data_loader.loader import DataLoader
 from src.chunking.chunker import HierarchicalChunker
-from src.retrieval.vector_store import HybridSearchVectorStore
 from src.retrieval.vector_store_utils import VectorStoreUtilsMixin
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
-from src.retrieval.rag_pipeline import RAGPipeline
-from src.retrieval.orchestrator import handle_user_query
-from config.settings import DATA_DIR, VECTOR_STORE_DIR, shared_session_service, APP_NAME, USER_ID
-from src.retrieval import query_rewriter_muti_agent
 
 
-from google.adk.agents import BaseAgent
-from google.genai import types
-from google.adk.events import Event
+from google.adk.agents import LlmAgent
+from google.adk.models import LiteLlm
+from google.adk.tools.agent_tool import AgentTool
 
 from pydantic import Field
+
+from config.settings import DATA_DIR, VECTOR_STORE_DIR, CURRENT_USER
+
+
+
+from google.adk.agents import LlmAgent
+from google.adk.models import LiteLlm
+from google.adk.tools.function_tool import FunctionTool
+from typing import Dict, Any, List
+from google.adk.tools.tool_context import ToolContext
+from pydantic import BaseModel
+
+from sub_agents.planner_agent import planner_agent
+import sub_agents.query_rewriter_agent as q
+from sub_agents.query_rewriter_agent import query_rewriter_agent, set_meetings
+from sub_agents.answer_agent import answer_synthesis_agent
+from datetime import datetime
+
+from typing import Any
+
+
+#MEETING_CATALOG = ""
+
+def format_context_for_answer(chunks: List[Dict[str, Any]], max_chunks: int = 15) -> str:
+    """
+    This is a helper function for our agents,change the format of the time
+    structure is as follpwing：
+    [data012_summary_1] (Date: 2025-11-29)
+    <chunk text>
+
+    [data013_summary_3] (Date: 2025-11-30T20:21:00+08:00)
+    <chunk text>
+    """
+    if not chunks:
+        return "No relevant context found."
+
+    lines: List[str] = []
+
+    for chunk in chunks[:max_chunks]:
+        chunk_id = chunk.get("chunk_id", "N/A")
+        text = chunk.get("text", "")
+        meta = chunk.get("metadata") or {}
+        dt = meta.get("datetime", "N/A")
+
+        lines.append(f"[{chunk_id}] (Date: {dt})")
+        lines.append(text)
+        lines.append("")
+
+    return "\n".join(lines)
+
 
 
 
@@ -33,24 +78,173 @@ if "SSL_CERT_FILE" in os.environ:
         del os.environ["SSL_CERT_FILE"]
         print(f"Warning: Removed invalid SSL_CERT_FILE: {cert_path}")
 
+# return models for tool function
+class RewriteResult(BaseModel):
+    rewritten_query: str
+    paraphrases: List[str]
+    entities: Dict[str, Any]
+    structured_info: Dict[str, Any]
 
-class FullRAGSystemAgent(BaseAgent):
+class RetrieveResult(BaseModel):
+    chunks: List[Dict[str, Any]]
+    total_chunks: int
+
+class AnswerResult(BaseModel):
+    answer: str
+    chunks_used: List[Dict[str, Any]]
+    num_chunks: int
+
+class PlanResult(BaseModel):
+    need_rewrite: bool
+    need_rag: bool
+    answer_mode: str  # "rag" or "direct"
+    reason: str
+
+
+
+class FullRAGSystemAgent(LlmAgent):
     
-    rag_pipeline: Optional[RAGPipeline] = Field(default=None)
     initialized: bool = Field(default=False)
     meeting_catalog: str = Field(default="")
-    def __init__(self):
-        super().__init__(name="FullRAGSystemAgent")
-        self.rag_pipeline = None
-        self.initialized = False
-        self.meeting_catalog = ""
+    retriever: Optional[HierarchicalRetriever] = Field(default=None)
+    total_meetings: int = Field(default= 0)
+    
+    
+
+    async def rag_retrieve_func(self, rewritten_query: str, tool_context: ToolContext, top_k: int = 15) -> Dict[str, Any]:
+        try:
+            tool_context.state["retrieval_chunks"] = []
+            plan = tool_context.state.get("plan", {})
+            if not plan.get("need_rag", False):
+                return {"skipped": True, "chunks": [], "total_chunks": 0}
+
+            # for protection
+            if not tool_context.state.get("initialized", False):
+                print("Warning: System not initialized in setup_state_func, performing emergency initialization...")
+                self._initialize_components()
+                tool_context.state["initialized"] = True
+                tool_context.state["meeting_catalog"] = self.meeting_catalog
+
+            if not self.initialized:
+                raise RuntimeError("System initialization failed")
+
+            rw = tool_context.state.get("rewrite", {})
+            results = self.retriever.search_with_rewriter(
+                original_query=tool_context.state.get("user_query", rewritten_query),
+                query_rewrite={
+                    "normalized_query": rw.get("rewritten_query", rewritten_query),
+                    "paraphrases": rw.get("paraphrases", []),
+                    "entities": rw.get("entities", {}),
+                },
+                level="summary",
+                top_k_vector=5,
+                top_k_bm25=20,
+                num_paraphrases=2,
+            )
+
+            # check if the form suitable for returning
+            if isinstance(results, dict):
+                hits = results.get("hits")
+                if isinstance(hits, list):
+                    results = hits
+                    
+                
+
+            chunks = sorted(results, key=lambda x: x.get("hybrid_score", 0), reverse=True)[:top_k]
+            clean_chunks = [
+                {
+                    "chunk_id": c.get("chunk_id"),
+                    "text": c.get("text"),
+                    "metadata": {"datetime": c.get("metadata", {}).get("datetime", "N/A")},
+                }
+                for c in chunks
+            ]
+            
+            tool_context.state["retrieval_chunks"]= clean_chunks
+            return { 
+                "skipped": False,
+                "chunks": clean_chunks,
+                "total_chunks": len(chunks),
+            }
+
+        except Exception as e:
+            return {"skipped": True, "chunks": [], "total_chunks": 0, "error": str(e)}
+
+    
+    def setup_state_func(self, tool_context: ToolContext) -> Dict[str, Any]:
+        """Setup required state variables for all tools - now includes full system initialization"""
         
-    def _initialize_complete_rag_system(self) -> RAGPipeline:
+        # check for initialize
+        if tool_context.state.get("initialized", False):
+            return {
+                "status": "already_initialized",
+                "message": "System already initialized"
+            }
+
+        # initial for rag, this i will change later, becasue we cannot put the initial logic with the QnA logic together
+        self._initialize_components()
+
+        # set our initial memory
+        tool_context.state["initialized"] = True
+        tool_context.state["meeting_catalog"] = self.meeting_catalog
+        tool_context.state["index_status"] = {
+            "total_meetings": self.total_meetings,
+            "vector_store_ready": self.retriever is not None
+        }
+        tool_context.state["now_str"] = datetime.now().date().isoformat()
+        tool_context.state["current_user_name"] = CURRENT_USER
+        tool_context.state["system_message"] = "✅ System initialized: meetings loaded, index ready."
+
+        return {
+            "status": "state_initialized",
+            "message": tool_context.state["system_message"]
+        }
+
+    def __init__(self):       
+        # create tools
+        setup_tool = FunctionTool(func=self.setup_state_func)
+        retrieve_tool = FunctionTool(func=self.rag_retrieve_func)
+        plan_tool = AgentTool(agent=planner_agent)
+        rewrite_tool = AgentTool(agent=query_rewriter_agent) 
+        answer_tool = AgentTool(agent=answer_synthesis_agent)
+
+        
+        super().__init__(
+        name="FullRAGSystemAgent",
+        model=LiteLlm(model="gpt-4o-mini"),
+        instruction="""You are a RAG system orchestrator. Follow this dynamic sequence:
+0. First, always call setup_tool to initialize state variables, if user has an input sentence
+1. Second, always call plan_tool to analyze the query and create an execution plan
+2. If plan.need_rewrite is True, call rewrite_tool, you must send the original query to rewrite_tool
+3. If plan.need_rag is True, call retrieve_tool with the rewritten_query (or original if rewrite was skipped)
+4. Always call answer_tool with the original user_query and retrieved chunks (or empty chunks if retrieval was skipped)
+
+Always use the user's latest message as the query.
+State is managed automatically by the sub-agents via their output_keys.
+""",
+        tools=[setup_tool, plan_tool,rewrite_tool, retrieve_tool, answer_tool],
+    )
+        
+
+        
+    def _initialize_components(self):
+        """Delay initialization of all RAG components"""
+        if self.initialized:
+            return
+            
+        print("Initializing RAG system for first query...")
+        self.retriever = self._initialize_complete_rag_system()
+                
+        self.initialized = True
+        
+    
+        
+    def _initialize_complete_rag_system(self) -> HierarchicalRetriever:
         """
         rag pipeline
         """
         print("=" * 80)
-        print("🔄 Initializing Complete RAG System for ADK UI")
+        print("Initializing Complete RAG System for ADK UI")
         print("=" * 80)
         
         data_dir = DATA_DIR
@@ -59,7 +253,7 @@ class FullRAGSystemAgent(BaseAgent):
         
         include_chunk_level = False  # ADK UI not include chunk level
         
-        # Step 1: Load all meetings from data directory
+        # Load all meetings from data directory
         print("\n[Step 1] Loading meeting data...")
         loader = DataLoader(data_dir)
         all_meetings = loader.load_all_meetings()
@@ -68,7 +262,7 @@ class FullRAGSystemAgent(BaseAgent):
         if not all_meetings:
             raise ValueError("No meetings found. Please check your data directory.")
 
-        # Step 2: Check for existing vector store
+        # Check for existing vector store
         print("\n[Step 2] Checking for existing vector store...")
         vector_store = None
         processed_meeting_ids: Set[str] = set()
@@ -88,7 +282,7 @@ class FullRAGSystemAgent(BaseAgent):
         else:
             print("No existing vector store found. Will create new one.")
 
-        # Step 3: Filter to new meetings only
+        # Filter to new meetings only
         new_meetings = []
         for meeting in all_meetings:
             if meeting.meeting_id not in processed_meeting_ids:
@@ -96,7 +290,7 @@ class FullRAGSystemAgent(BaseAgent):
 
         print(f"\n[Step 3] Found {len(new_meetings)} new meetings to process")
 
-        # Step 4: Process new meetings
+        # Process new meetings
         if new_meetings:
             print("\n[Step 4] Processing new meetings...")
 
@@ -135,54 +329,22 @@ class FullRAGSystemAgent(BaseAgent):
         else:
             print("\n[Step 4] No new meetings to process ✓")
 
-        # Step 5: Register all meetings with query rewriter (for MEETING_CATALOG)
+        # Register all meetings with query rewriter (for MEETING_CATALOG)
         print("\n[Step 5] Registering meetings with query rewriter...")
-        query_rewriter_muti_agent.set_meetings(all_meetings)
-        self.meeting_catalog = query_rewriter_muti_agent.MEETING_CATALOG
+        set_meetings(all_meetings)
+        self.meeting_catalog = q.MEETING_CATALOG
         
         # print("DEBUG: loaded meetings count:", len(all_meetings))
         # print(f"DEBUG: MEETING_CATALOG preview:\n{self.meeting_catalog[:500]}...")
 
-        # Step 6: Create retriever
+        # Create retriever
         print("\n[Step 6] Creating hierarchical retriever...")
         if vector_store is None:
             raise RuntimeError("vector initailazation failed")
         retriever = HierarchicalRetriever(vector_store)
         print("✓ Hierarchical retriever created")
 
-        # Step 7: Create RAG pipeline  
-        print("\n[Step 7] Creating RAG pipeline...")
-        from src.retrieval.answer_generator_muti_agent import AnswerGeneratorMultiAgent
-        from src.retrieval.query_rewriter_muti_agent import QueryRewriter
-        
-        
-        query_rewriter = QueryRewriter(
-            session_service=shared_session_service, 
-            user_id=USER_ID, 
-            app_name=APP_NAME
-        )
-        
-        
 
-
-        # Construct agents using unified session keys from config.settings
-        answer_generator = AnswerGeneratorMultiAgent(
-            session_service=shared_session_service, 
-            user_id=USER_ID, 
-            app_name=APP_NAME
-        )
-        
-        pipeline = RAGPipeline(
-            retriever=retriever,
-            answer_generator=answer_generator,
-            query_rewriter=query_rewriter,
-            use_query_rewriter=True
-        )
-
-
-
-        
-        print("✓ RAG pipeline created")
         
         print("\n" + "=" * 80)
         print("RAG System Initialized Successfully!")
@@ -191,76 +353,8 @@ class FullRAGSystemAgent(BaseAgent):
         print(f"   New meetings processed: {len(new_meetings)}")
         print("=" * 80)
         
-        return pipeline
-    
-    async def _run_async_impl(self, invocation_context, **kwargs):
-        """
-        user question and retrieve logic
-        """
-        try:
-            #delay initialization for rag pipeline
-            if not self.initialized:
-                print("Initializing RAG system for first query...")
-                self.rag_pipeline = self._initialize_complete_rag_system()
-                self.initialized = True
-            
-            # extract user query
-            user_message = invocation_context.user_content
-            if isinstance(user_message, types.Content):
-                user_query = user_message.parts[0].text if user_message.parts else ""
-            else:
-                user_query = str(user_message)
-            
-            user_query = user_query.strip()
-# empty query situation
-            if not user_query:
-                yield Event(
-                    author= "assistant",
-                    content=types.Content(
-                        role="assistant", 
-                        parts=[types.Part(text="You do not ask a question")]
-                    )
-                )
-                return
-            
-            print(f"Processing query: {user_query[:100]}{'...' if len(user_query) > 100 else ''}")
-            
-            # call complete rag logic
-            result = await handle_user_query(
-                user_query=user_query,
-                rag_pipeline=self.rag_pipeline
-            )
-            
-            # extract answers
-            answer = result.get('answer', 'Sorry, I cannot generate answers.')
-            
-            # for debug
-            if result.get('rewritten_query'):
-                print(f"   → Rewritten: {result['rewritten_query']}")
-            if result.get('num_chunks'):
-                print(f"   → Used {result['num_chunks']} chunks")
-            
-            yield Event(
-                author= "assistant",
-                content=types.Content(
-                    role="assistant",
-                    parts=[types.Part(text=answer)]
-                )
-            )
-            
-        except Exception as e:
-            error_msg = f"There is an error when dealing with query: {str(e)}"
-            print(f"❌ RAGSystemAgent error: {error_msg}")
-            import traceback
-            traceback.print_exc()
-            
-            yield Event(
-                author = "assistant",
-                content=types.Content(
-                    role="assistant",
-                    parts=[types.Part(text=f"There is some errors when dealing with your query：{str(e)}")]
-                )
-            )
+        self.total_meetings = len(all_meetings)
+        return retriever
 
 
 # golbal agent for google adk web surface UI
