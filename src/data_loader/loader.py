@@ -2,6 +2,7 @@
 This module is data loader for the project
 """
 import json
+import re
 from pathlib import Path
 from typing import List, Dict, Any
 from dataclasses import dataclass
@@ -81,7 +82,7 @@ class DataLoader:
         summary_text = self._read_text_file(summary_file)
         
         # 3. construct Meeting object
-        return Meeting(
+        meeting = Meeting(
             meeting_id=metadata['meeting_id'],
             title=metadata['title'],
             datetime=metadata['datetime'],
@@ -99,6 +100,107 @@ class DataLoader:
             summary_text=summary_text,
             metadata=metadata
         )
+
+        # 4. Generate and save summary_metadata.json
+        self._generate_summary_metadata(meeting, con_dir)
+
+        return meeting
+
+    def _generate_summary_metadata(self, meeting: Meeting, con_dir: Path) -> None:
+        """
+        Generate summary_metadata.json by parsing summary_text and metadata.
+        This file contains structured topic and action information for filtering.
+        """
+        # Extract topics from summary_text
+        # Format: [S013-T01] Topic: Topic Name
+        topics = []
+        topic_pattern = re.compile(r'\[S\d+-T\d+\]\s*Topic:\s*(.+?)(?:\n|$)')
+        for match in topic_pattern.finditer(meeting.summary_text):
+            topic_name = match.group(1).strip()
+            # Remove markdown formatting like ** at the end
+            topic_name = topic_name.rstrip('*').strip()
+            if topic_name:
+                topics.append(topic_name)
+
+        # Extract actions from summary_text
+        # Format: [S013-A01] Action: Description
+        actions = []
+        action_pattern = re.compile(r'\[S\d+-A\d+\]\s*Action:\s*(.+?)(?:\n|$)')
+        for match in action_pattern.finditer(meeting.summary_text):
+            action_desc = match.group(1).strip()
+            # Remove markdown formatting like ** at the end
+            action_desc = action_desc.rstrip('*').strip()
+            if action_desc:
+                # Try to extract assignee from the action description
+                # Format often: "Action: Name to do something"
+                assignee = None
+                if " to " in action_desc:
+                    # Pattern: "Hongye Qian to Begin with..."
+                    parts = action_desc.split(" to ", 1)
+                    potential_assignee = parts[0].strip()
+                    # Check if this matches a participant name
+                    for p in meeting.participants:
+                        if isinstance(p, dict):
+                            p_name = p.get("name", "")
+                        else:
+                            p_name = str(p)
+                        if p_name.lower() == potential_assignee.lower():
+                            assignee = p_name
+                            break
+                        # Also check if participant name is in the text
+                        if potential_assignee.lower() in p_name.lower():
+                            assignee = p_name
+                            break
+
+                # Also check metadata for action info
+                metadata_actions = meeting.metadata.get("actions", [])
+                action_id = None
+                for md_action in metadata_actions:
+                    if md_action.get("description_plain", "").lower() in action_desc.lower():
+                        action_id = md_action.get("action_id")
+                        if not assignee and isinstance(md_action.get("assignee"), dict):
+                            assignee = md_action["assignee"].get("name")
+                        break
+
+                action_entry = {
+                    "action_id": action_id or f"{meeting.meeting_id.replace('data', 'M')}-A{len(actions)+1:02d}",
+                    "task": action_desc,
+                }
+                if assignee:
+                    action_entry["assignee"] = assignee
+                actions.append(action_entry)
+
+        # Extract participant names
+        participants = []
+        for p in meeting.participants:
+            if isinstance(p, dict):
+                name = p.get("name", "").strip()
+            else:
+                name = str(p).strip()
+            if name:
+                participants.append(name)
+
+        # Handle datetime - can be string or None
+        datetime_str = None
+        if meeting.datetime:
+            if isinstance(meeting.datetime, str):
+                datetime_str = meeting.datetime
+            elif hasattr(meeting.datetime, 'isoformat'):
+                datetime_str = meeting.datetime.isoformat()
+
+        # Build the summary metadata
+        summary_metadata = {
+            "meeting_id": meeting.meeting_id,
+            "datetime": datetime_str,
+            "participants": participants,
+            "topics": topics if topics else meeting.topics,  # Fallback to metadata topics if none parsed
+            "actions": actions
+        }
+
+        # Save to file
+        output_file = con_dir / "summary_metadata.json"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(summary_metadata, f, ensure_ascii=False, indent=2)
     
     def _find_file(self, directory: Path, filename: str) -> Path:
         """find file (support wildcard and case-insensitive)"""

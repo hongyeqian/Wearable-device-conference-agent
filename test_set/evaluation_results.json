@@ -1,0 +1,51 @@
+{
+  "evaluation_date": "2026-02-23T19:49:05.267164",
+  "total_test_cases": 1,
+  "successful_queries": 1,
+  "metrics": {
+    "faithfulness": 0.9411764705882353,
+    "answer_relevancy": 0.8744363213019103,
+    "answer_correctness": 0.413483478651985,
+    "context_recall": 1.0
+  },
+  "test_cases": [
+    {
+      "id": "q001",
+      "question": "What did I discuss with Ankit in our recent meetings?",
+      "ground_truth": "In our recent meetings, we mainly discussed the retrieval pipeline and summary architecture design, including metadata embeddings, hybrid search (BM25 + vector), indexing efficiency, and scalability concerns.We also talked about improving project structure, terminology clarity, and designing a new multi-level summarization architecture with semantic normalization and a system diagram for demonstration",
+      "relevant_meeting_ids": [
+        "data010",
+        "data012",
+        "data013"
+      ],
+      "expected_topics": [
+        "retrieval pipeline",
+        "metadata embeddings",
+        "summary architecture"
+      ],
+      "retrieved_chunks": [
+        {
+          "chunk_id": "data013_summary_0",
+          "datetime": "2025-11-30T14:36:00+08:00"
+        },
+        {
+          "chunk_id": "data012_summary_0",
+          "datetime": "2025-11-29T00:00:00+08:00"
+        },
+        {
+          "chunk_id": "data012_summary_1",
+          "datetime": "2025-11-29T00:00:00+08:00"
+        },
+        {
+          "chunk_id": "data013_summary_1",
+          "datetime": "2025-11-30T14:36:00+08:00"
+        },
+        {
+          "chunk_id": "data010_summary_7",
+          "datetime": "2025-11-21T16:00:00+08:00"
+        }
+      ],
+      "evaluation_success": true
+    }
+  ]
+}

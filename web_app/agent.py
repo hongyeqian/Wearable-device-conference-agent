@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from sub_agents.planner_agent import planner_agent
 import sub_agents.query_rewriter_agent as q
-from sub_agents.query_rewriter_agent import query_rewriter_agent, set_meetings
+from sub_agents.query_rewriter_agent import query_rewriter_agent, set_meetings, load_summary_metadata
 from sub_agents.answer_agent import answer_synthesis_agent
 from datetime import datetime
 
@@ -108,14 +108,17 @@ class FullRAGSystemAgent(LlmAgent):
     meeting_catalog: str = Field(default="")
     retriever: Optional[HierarchicalRetriever] = Field(default=None)
     total_meetings: int = Field(default= 0)
+    summary_metadata_index: List[Dict[str, Any]] = Field(default_factory=list)
+    all_meeting_ids: Set[str] = Field(default_factory=set)
     
     
 
-    async def rag_retrieve_func(self, rewritten_query: str, tool_context: ToolContext, top_k: int = 15) -> Dict[str, Any]:
+    async def rag_retrieve_func(self, query: str, tool_context: ToolContext, top_k: int = 5) -> Dict[str, Any]:
         try:
             tool_context.state["retrieval_chunks"] = []
             plan = tool_context.state.get("plan", {})
             if not plan.get("need_rag", False):
+                tool_context.state["retrieval_chunks"] = []
                 return {"skipped": True, "chunks": [], "total_chunks": 0}
 
             # for protection
@@ -124,23 +127,78 @@ class FullRAGSystemAgent(LlmAgent):
                 self._initialize_components()
                 tool_context.state["initialized"] = True
                 tool_context.state["meeting_catalog"] = self.meeting_catalog
+                # Also load summary metadata for filter agent
+                tool_context.state["summary_metadata_index"] = self.summary_metadata_index
 
             if not self.initialized:
                 raise RuntimeError("System initialization failed")
 
-            rw = tool_context.state.get("rewrite", {})
-            results = self.retriever.search_with_rewriter(
-                original_query=tool_context.state.get("user_query", rewritten_query),
-                query_rewrite={
-                    "normalized_query": rw.get("rewritten_query", rewritten_query),
-                    "paraphrases": rw.get("paraphrases", []),
-                    "entities": rw.get("entities", {}),
-                },
-                level="summary",
-                top_k_vector=5,
-                top_k_bm25=20,
-                num_paraphrases=2,
-            )
+            # Get the processed query from the pipeline
+            # Priority: time_rewrite_result > pronoun_rewrite_result > user_query
+            # (Filter Agent handles this same logic, but we need it here for retrieval)
+            time_result = tool_context.state.get("time_rewrite_result")
+            pronoun_result = tool_context.state.get("pronoun_rewrite_result")
+            user_query = tool_context.state.get("user_query", query)
+            
+            # Select the most processed query
+            processed_query = time_result or pronoun_result or user_query
+            
+            # Get filtered meeting IDs from Filter Agent
+            filter_result = tool_context.state.get("filter", {})
+            relevant_meeting_ids = filter_result.get("relevant_meeting_ids", [])
+            
+            # If no filter result or empty list, search all meetings
+            if not relevant_meeting_ids:
+                relevant_meeting_ids = list(self.all_meeting_ids) if hasattr(self, 'all_meeting_ids') else []
+            
+            print(f"Filter result: {relevant_meeting_ids}")
+            
+            # Ensure retriever is initialized
+            if self.retriever is None:
+                raise RuntimeError("Retriever not initialized")
+            
+            # Perform search with optional meeting_ids filter
+            # Note: We now use the processed_query directly without rewriter output
+            if relevant_meeting_ids:
+                # Use search_with_meeting_ids_filter for filtered search
+                results = self.retriever.vector_store.search_with_meeting_ids_filter(
+                    query_text=processed_query,
+                    level='summary',
+                    meeting_ids=set(relevant_meeting_ids),
+                    top_k=top_k * 2  # Get more results since we're filtering
+                )
+                
+                # Also search with simple multi-query approach for better recall
+                # Use the processed_query as the main query
+                results_rewriter = self.retriever.search_with_rewriter(
+                    original_query=processed_query,
+                    query_rewrite={
+                        "normalized_query": processed_query,
+                        "paraphrases": [processed_query],  # Use processed query as paraphrase
+                        "entities": {},  # No pre-extracted entities
+                    },
+                    level="summary",
+                    top_k_vector=5,
+                    top_k_bm25=20,
+                    num_paraphrases=2,
+                )
+                
+                # Merge results - keep unique chunks
+                results = results + results_rewriter
+            else:
+                # No filter - search all meetings
+                results = self.retriever.search_with_rewriter(
+                    original_query=processed_query,
+                    query_rewrite={
+                        "normalized_query": processed_query,
+                        "paraphrases": [processed_query],
+                        "entities": {},
+                    },
+                    level="summary",
+                    top_k_vector=5,
+                    top_k_bm25=20,
+                    num_paraphrases=2,
+                )
 
             # check if the form suitable for returning
             if isinstance(results, dict):
@@ -194,7 +252,9 @@ class FullRAGSystemAgent(LlmAgent):
         tool_context.state["now_str"] = datetime.now().date().isoformat()
         tool_context.state["current_user_name"] = CURRENT_USER
         tool_context.state["system_message"] = "✅ System initialized: meetings loaded, index ready."
-
+        tool_context.state["retrieval_chunks"] = []
+        # Pass summary metadata index to session state for Filter Agent
+        tool_context.state["summary_metadata_index"] = self.summary_metadata_index
         return {
             "status": "state_initialized",
             "message": tool_context.state["system_message"]
@@ -216,7 +276,8 @@ class FullRAGSystemAgent(LlmAgent):
 0. First, always call setup_tool to initialize state variables, if user has an input sentence
 1. Second, always call plan_tool to analyze the query and create an execution plan
 2. If plan.need_rewrite is True, call rewrite_tool, you must send the original query to rewrite_tool
-3. If plan.need_rag is True, call retrieve_tool with the rewritten_query (or original if rewrite was skipped)
+3. If plan.need_rag is True, call retrieve_tool with the query (MUST use output from rewrite_tool if need_rewrite is True, otherwise use the original user query)
+   If plan.need_rag is False, do not call retrieve_tool
 4. Always call answer_tool with the original user_query and retrieved chunks (or empty chunks if retrieval was skipped)
 
 Always use the user's latest message as the query.
@@ -333,6 +394,12 @@ State is managed automatically by the sub-agents via their output_keys.
         print("\n[Step 5] Registering meetings with query rewriter...")
         set_meetings(all_meetings)
         self.meeting_catalog = q.MEETING_CATALOG
+        
+        # Load summary metadata for Filter Agent
+        print("\n[Step 5b] Loading summary metadata for Filter Agent...")
+        self.summary_metadata_index = load_summary_metadata()
+        self.all_meeting_ids = {m.meeting_id for m in all_meetings}
+        print(f"✓ Loaded {len(self.summary_metadata_index)} summary metadata entries")
         
         # print("DEBUG: loaded meetings count:", len(all_meetings))
         # print(f"DEBUG: MEETING_CATALOG preview:\n{self.meeting_catalog[:500]}...")

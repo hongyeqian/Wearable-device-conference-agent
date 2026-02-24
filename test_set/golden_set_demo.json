@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "created_date": "2026-02-16",
+  "total_questions": 20,
+  "test_cases": [
+    {
+      "id": "q001",
+      "question": "What did I discuss with Ankit in our recent meetings?",
+      "ground_truth": "In our recent meetings, we mainly discussed the retrieval pipeline and summary architecture design, including metadata embeddings, hybrid search (BM25 + vector), indexing efficiency, and scalability concerns.We also talked about improving project structure, terminology clarity, and designing a new multi-level summarization architecture with semantic normalization and a system diagram for demonstration",
+      "relevant_meeting_ids": ["data010", "data012", "data013"],
+      "expected_topics": ["retrieval pipeline",   "metadata embeddings","summary architecture"]
+    }
+  ]
+}

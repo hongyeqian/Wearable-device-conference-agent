@@ -60,9 +60,20 @@ USER_ID = "u-main"
 
 # shared session state
 from google.adk.sessions import InMemorySessionService
-shared_session_service = InMemorySessionService()
+shared_session_service = None
 
+def get_shared_session_service():
+    global shared_session_service
+    if shared_session_service is None:
+        shared_session_service = InMemorySessionService()
+    return shared_session_service
 
+def set_shared_session_service(service):
+    """Allow external injection (ADK runtime can call this) to set the session service instance."""
+    global shared_session_service
+    shared_session_service = service
+    
+    
 # Canonical initial state for a new turn session. Orchestrator should copy and fill runtime fields.
 TURN_SESSION_INITIAL_STATE = {
     "user_query": "",
@@ -71,6 +82,7 @@ TURN_SESSION_INITIAL_STATE = {
     "now_str": "",
     "turn_memory": [],
     "memory_context_text": "",
+    "retrieval_chunks": [],
     # Optional placeholders agents may write into:
     # "pronoun_rewrite_result": None,
     # "time_rewrite_result": None,

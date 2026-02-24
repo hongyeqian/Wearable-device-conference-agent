@@ -8,7 +8,6 @@ sys.path.insert(0, str(project_root))
 
 
 from src.retrieval.vector_store import HybridSearchVectorStore
-from src.retrieval.metadata_filter import MetadataFilter
 
 @dataclass
 class HierarchicalResults:

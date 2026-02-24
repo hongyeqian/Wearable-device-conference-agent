@@ -1,0 +1,175 @@
+{
+  "version": "1.0",
+  "created_date": "2026-02-16",
+  "total_questions": 20,
+  "test_cases": [
+    {
+      "id": "q001",
+      "question": "What did I discuss with Ankit in our recent meetings?",
+      "ground_truth": "In our recent meetings, we mainly discussed the retrieval pipeline and summary architecture design, including metadata embeddings, hybrid search (BM25 + vector), indexing efficiency, and scalability concerns.We also talked about improving project structure, terminology clarity, and designing a new multi-level summarization architecture with semantic normalization and a system diagram for demonstration",
+      "relevant_meeting_ids": ["data010", "data012", "data013"],
+      "expected_topics": ["retrieval pipeline",   "metadata embeddings","summary architecture"]
+    },
+    {
+      "id": "q002",
+      "question": "What were the main topics discussed by Jensen Huang?",
+      "ground_truth": "Jensen Huang discussed Nvidia’s founding vision of reinventing computing through parallel GPU architecture and CUDA, which transformed GPUs into universal AI accelerators. He highlighted the breakthrough of AlexNet and the rise of deep learning, emphasizing long-term investment in scalable AI and energy-efficient hardware innovation. He also outlined the future of AI infrastructure, including AI factories, Omniverse and Cosmos for robotics and digital twins, and the broader transition to the intelligence age.",
+      "relevant_meeting_ids": ["data006", "data008"],
+      "expected_topics": ["GPU", "CUDA", "Deep Learning"]
+    },
+    {
+      "id": "q003",
+      "question": "What did Nimi Mehta talk about in her conversation with the host?",
+      "ground_truth": "Nimi Mehta spoke about her early career setback after MTV, how she rebuilt her path through persistence, and her transition into entrepreneurship. She also discussed intuition-based decision-making, emotional awareness, and her Voice Layer Theory for rediscovering authenticity.",
+      "relevant_meeting_ids": ["data004"],
+      "expected_topics": ["multi-level summarization", "semantic normalization", "system diagram"]
+    },
+    {
+    "id": "q004",
+    "question": "What did Elon Musk and Jensen Huang discuss together?",
+    "ground_truth": "They discussed the transition from the industrial age to the intelligence age, the rise of AI factories and large-scale compute infrastructure, as well as robotics and automation. The conversation also covered productivity gains, the future of work, and the expansion of AI into space.",
+    "relevant_meeting_ids": ["data008"],
+    "expected_topics": ["intelligence age", "AI factories", "robotics"]
+    },
+    {
+      "id": "q005",
+      "question": "What action items came out of the TikTok discussion?",
+      "ground_truth": "The action items included continuing the rollout of Project Texas to localize U.S. user data under independent oversight, strengthening youth safety and content moderation frameworks, and promoting Family Pairing and digital wellness initiatives.",
+      "relevant_meeting_ids": ["data007"],
+      "expected_topics": ["Project Texas rollout", "youth safety", "Family Pairing"]
+    },
+    {
+      "id": "q006",
+      "question": "What follow-up actions were mentioned in Jensen Huang’s AI conversation?",
+      "ground_truth": "Jensen highlighted advancing the fusion of Omniverse and Cosmos to develop AI-ready digital twins for robotics and scientific simulation. He also emphasized promoting AI literacy and tutoring to prepare the next generation to effectively collaborate with AI systems.",
+      "relevant_meeting_ids": ["data006"],
+      "expected_topics": ["Omniverse-Cosmos fusion", "digital twins", "AI literacy"]
+    },
+    {
+    "id": "q007",
+    "question": "What did I and Ankit mainly discuss about the overall retrieval architecture?",
+    "ground_truth": "We discussed a metadata-first retrieval architecture where metadata embeddings are used to identify the correct dataset before retrieving summary and meeting-level content. The system links metadata, summaries, and datasets using structured reference IDs.",
+    "relevant_meeting_ids": ["data010"],
+    "expected_topics": ["metadata-first", "retrieval architecture", "reference IDs"]
+  },
+  {
+    "id": "q008",
+    "question": "How are metadata, summaries, and datasets connected in the RAG system designed by Hongye Qian and Ankit?",
+    "ground_truth": "They are connected through structured reference IDs, where metadata entries link to summary chunks and underlying datasets. Metadata matching is performed first to narrow down candidates before deeper retrieval.",
+    "relevant_meeting_ids": ["data010"],
+    "expected_topics": ["reference IDs", "metadata linkage", "dataset mapping"]
+  },
+  {
+    "id": "q009",
+    "question": "Why are Ankit and I currently using top-1 metadata selection?",
+    "ground_truth": "We are using top-1 metadata selection based on cosine similarity because the dataset is currently small. It was noted that this strategy may need adjustment as the dataset grows.",
+    "relevant_meeting_ids": ["data010"],
+    "expected_topics": ["top-1", "cosine similarity", "small dataset"]
+  },
+  {
+    "id": "q010",
+    "question": "What was discussed about hybrid scoring in the retrieval system?",
+    "ground_truth": "We discussed combining vector similarity scores with BM25 keyword scores using a hybrid scoring formula. The correctness and impact of this formula need further verification.",
+    "relevant_meeting_ids": ["data010"],
+    "expected_topics": ["hybrid scoring", "BM25 + vector", "formula validation"]
+  },
+  {
+    "id": "q011",
+    "question": "What presentation improvements were requested in Novemember 2025?",
+    "ground_truth": "It was requested that Hongye create a clearer PPT diagram illustrating the full retrieval pipeline, including metadata, summary, and meeting-level flows.",
+    "relevant_meeting_ids": ["data010"],
+    "expected_topics": ["PPT diagram", "retrieval flow", "visualization"]
+  },
+  {
+    "id": "q012",
+    "question": "What did Ankit and I discuss about meeting-level embeddings?",
+    "ground_truth": "We discussed splitting meeting transcripts into segments and using meeting-level embeddings for deeper comparison after metadata narrowing. Meeting-level matching complements summary-level retrieval.",
+    "relevant_meeting_ids": ["data010"],
+    "expected_topics": ["meeting-level embeddings", "segmentation", "deep comparison"]
+  },
+  {
+    "id": "q013",
+    "question": "What did Ankit and I discuss about using our own meeting transcripts for evaluation?",
+    "ground_truth": "We agreed to use our own meeting transcripts as evaluation data to test retrieval accuracy and ensure that results match known discussion topics.",
+    "relevant_meeting_ids": ["data011"],
+    "expected_topics": ["evaluation data", "meeting transcripts", "retrieval testing"]
+  },
+  {
+    "id": "q014",
+    "question": "What concerns were raised about retrieval consistency?",
+    "ground_truth": "It was noted that different retrieval paths could generate inconsistent top-K results. Extensive testing was recommended to verify stability and correctness.",
+    "relevant_meeting_ids": ["data011"],
+    "expected_topics": ["top-K inconsistency", "retrieval stability", "testing"]
+  },
+  {
+    "id": "q015",
+    "question": "What did we discuss about improving robustness through graph modeling?",
+    "ground_truth": "We discussed adding a graph-embedding layer to capture relationships between meetings, participants, dates, and keywords to improve retrieval robustness.",
+    "relevant_meeting_ids": ["data011"],
+    "expected_topics": ["graph embedding", "entity relationships", "robustness"]
+  },
+  {
+    "id": "q016",
+    "question": "What did Ankit and I mainly talk about regarding system testing?",
+    "ground_truth": "We discussed conducting extensive testing to evaluate retrieval accuracy and compare alternative retrieval strategies, especially as the dataset grows.",
+    "relevant_meeting_ids": ["data011"],
+    "expected_topics": ["retrieval testing", "strategy comparison", "accuracy evaluation"]
+  },
+  {
+    "id": "q017",
+    "question": "What did Ankit and I discuss about improving retrieval quality overall?",
+    "ground_truth": "We discussed refining hybrid scoring, testing alternative retrieval paths, validating summary quality, and ensuring scalability as the dataset grows.",
+    "relevant_meeting_ids": ["data010", "data011"],
+    "expected_topics": ["retrieval quality", "hybrid scoring", "scalability"]
+  },
+  {
+    "id": "q018",
+    "question": "What technical components were reviewed in our retrieval discussion?",
+    "ground_truth": "We reviewed metadata embeddings, summary-level embeddings, meeting-level embeddings, hybrid scoring with BM25, cosine similarity ranking, and indexing structures.",
+    "relevant_meeting_ids": ["data010", "data011"],
+    "expected_topics": ["embeddings", "BM25", "indexing"]
+  },
+  {
+    "id": "q019",
+    "question": "What follow-up actions did I assign after the retrieval discussion?",
+    "ground_truth": "Hongye will refine the presentation materials, validate hybrid scoring formulas, and conduct further retrieval testing using internal meeting transcripts.",
+    "relevant_meeting_ids": ["data010", "data011"],
+    "expected_topics": ["presentation update", "formula validation", "testing"]
+  },
+  {
+    "id": "q020",
+    "question": "What is the overall goal of the retrieval system discussed in the two meetings between 15th to 21th Novemember 2025?",
+    "ground_truth": "The goal is to accurately retrieve relevant meeting content by combining metadata filtering, multi-level embeddings, and hybrid scoring while ensuring scalability and robustness as the dataset expands.",
+    "relevant_meeting_ids": ["data010", "data011"],
+    "expected_topics": ["retrieval accuracy", "multi-level embeddings", "scalability"]
+  },
+    {
+    "id": "q021",
+    "question": "What action item was assigned to me after the high-level meeting with Ankit?",
+    "ground_truth": "I was tasked with exploring a new project structure to improve overall efficiency and scalability, as discussed during the high-level project meeting.",
+    "relevant_meeting_ids": ["data012"],
+    "expected_topics": ["new project structure", "efficiency improvement", "scalability"]
+  },
+  {
+    "id": "q022",
+    "question": "What did I discuss with Ankit about summary architecture?",
+    "ground_truth": "We discussed the need for a structured summary architecture to store information from raw meeting data and support user queries. We also considered trade-offs between computational cost and information retention, along with adjustments needed for testing and system logic.",
+    "relevant_meeting_ids": ["data013"],
+    "expected_topics": ["summary architecture", "information retention", "computational cost"]
+  },
+  {
+    "id": "q023",
+    "question": "What action item was assigned to me in the summary architecture discussion?",
+    "ground_truth": "I was assigned to begin the second architecture design as discussed during the summary architecture meeting.",
+    "relevant_meeting_ids": ["data013"],
+    "expected_topics": ["second architecture design", "implementation"]
+  },
+  {
+    "id": "q024",
+    "question": "What action item was assigned to Ankit regarding presentations and system design?",
+    "ground_truth": "Ankit was assigned to prepare a detailed system diagram for presentations and to develop a basic chat interface for testing the system.",
+    "relevant_meeting_ids": ["data013"],
+    "expected_topics": ["system diagram", "chat interface", "testing"]
+  }
+  ]
+}

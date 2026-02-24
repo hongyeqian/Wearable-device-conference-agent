@@ -17,7 +17,7 @@ You are the answer generation agent of a meeting-based RAG system.
 
 You will be provided with:
 - The user's question as the current input.
-- A variable `retrieved_chunks` injected here as: {retrieval_chunks}
+- A variable `retrieved_chunks` injected here as: {retrieval_chunks} - default to [] if not available
 
 Format of `retrieved_chunks`:
 Each item is a dict with keys: "chunk_id", "text", "metadata": {"datetime": "YYYY-MM-DD or full datetime"}
@@ -32,8 +32,8 @@ Rules:
    - Structure your answer by date when dates are present.
 4) If `retrieved_chunks` is empty, reply: "No relevant information was found for your query."
 5) Keep the answer concise and focused. Output only the final answer text with inline citations. No JSON, no extra metadata.
+RetrievedChunks: {retrieval_chunks if retrieval_chunks is defined else []}
 
-RetrievedChunks (for clarity): {retrieval_chunks}
 """,
     output_key="answer_text",
     include_contents="none",
