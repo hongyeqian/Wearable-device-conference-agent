@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from sub_agents.planner_agent import planner_agent
 import sub_agents.query_rewriter_agent as q
-from sub_agents.query_rewriter_agent import query_rewriter_agent, set_meetings, load_summary_metadata
+from sub_agents.query_rewriter_agent import query_rewriter_agent
 from sub_agents.answer_agent import answer_synthesis_agent
 from datetime import datetime
 
@@ -392,12 +392,12 @@ State is managed automatically by the sub-agents via their output_keys.
 
         # Register all meetings with query rewriter (for MEETING_CATALOG)
         print("\n[Step 5] Registering meetings with query rewriter...")
-        set_meetings(all_meetings)
-        self.meeting_catalog = q.MEETING_CATALOG
+        # set_meetings(all_meetings)
+        # self.meeting_catalog = q.MEETING_CATALOG
         
         # Load summary metadata for Filter Agent
         print("\n[Step 5b] Loading summary metadata for Filter Agent...")
-        self.summary_metadata_index = load_summary_metadata()
+        # self.summary_metadata_index = load_summary_metadata()
         self.all_meeting_ids = {m.meeting_id for m in all_meetings}
         print(f"✓ Loaded {len(self.summary_metadata_index)} summary metadata entries")
         
