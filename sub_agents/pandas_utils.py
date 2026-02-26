@@ -169,7 +169,7 @@ class MeetingsDataFrame:
         )
         return self.df[mask]
     
-    def filter_by_date_range(self, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+    def filter_by_date_range(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
         """按日期范围筛选"""
         if self.df is None or self.df.empty:
             return pd.DataFrame()
