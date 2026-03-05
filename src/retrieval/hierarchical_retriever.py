@@ -165,16 +165,3 @@ class HierarchicalRetriever:
             top_k_bm25=top_k_bm25,
             num_paraphrases=num_paraphrases
         )
-        
-        
-    
-    
-    
-        
-        
-    
-
-
-
-
-

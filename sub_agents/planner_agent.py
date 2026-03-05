@@ -36,7 +36,8 @@ HARD RULES FOR need_rewrite=True:
 
 Return ONLY valid JSON that matches the schema.""",
             output_schema=Plan,  # Pydantic model class
-            output_key="plan"    
+            output_key="plan",
+            include_contents= "none"
         )
 
 planner_agent = PlannerAgent()

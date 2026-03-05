@@ -4,7 +4,7 @@ from config.settings import OPENAI_API_KEY, OPENAI_MODEL
 
 # LLM model for answer generation
 llm_model_answer = LiteLlm(
-    model=OPENAI_MODEL or "gpt-4o",
+    model=OPENAI_MODEL or "gpt-4o-mini",
     api_key=OPENAI_API_KEY,
 )
 
@@ -12,12 +12,12 @@ llm_model_answer = LiteLlm(
 answer_synthesis_agent = LlmAgent(
     name="AnswerSynthesisAgent",
     model=llm_model_answer,
-    instruction=r"""
+    instruction="""
 You are the answer generation agent of a meeting-based RAG system.
 
 You will be provided with:
 - The user's question as the current input.
-- A variable `retrieved_chunks` injected here as: {retrieval_chunks} - default to [] if not available
+- A variable `retrieved_chunks` injected here as: {{retrieval_chunks}} - default to [] if not available
 
 Format of `retrieved_chunks`:
 Each item is a dict with keys: "chunk_id", "text", "metadata": {"datetime": "YYYY-MM-DD or full datetime"}

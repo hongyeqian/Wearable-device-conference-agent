@@ -41,10 +41,19 @@ class RewriteOutput(BaseModel):
 _pandas_query_call_count = 0
 _PANDAS_QUERY_MAX_CALLS = 3
 
+# Store last pandas_query result for extraction
+_last_pandas_query_result: Optional[Dict[str, Any]] = None
+
 def reset_pandas_query_counter():
     """Reset the pandas_query call counter - call this before each new query"""
-    global _pandas_query_call_count
+    global _pandas_query_call_count, _last_pandas_query_result
     _pandas_query_call_count = 0
+    _last_pandas_query_result = None
+
+def get_last_pandas_query_result() -> Optional[Dict[str, Any]]:
+    """Get the last pandas_query result (for extraction of meeting_ids)"""
+    global _last_pandas_query_result
+    return _last_pandas_query_result
 
 def reset_counter() -> str:
     """
@@ -70,6 +79,7 @@ def pandas_query(
     month: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    person_name: Optional[str] = None,
 ) -> str:
     """
     Pandas query tool for resolving ambiguities
@@ -91,11 +101,12 @@ def pandas_query(
         month: Month (for filter_by_date)
         start_date: Start date (for filter_by_date_range), format: YYYY-MM-DD
         end_date: End date (for filter_by_date_range), format: YYYY-MM-DD
+        person_name: Person name (for last_n_meetings, optional - if provided, only returns meetings attended by this person)
     
     Returns:
         JSON formatted query result
     """
-    global _pandas_query_call_count
+    global _pandas_query_call_count, _last_pandas_query_result
     
     # Check call count limit (code enforced)
     if _pandas_query_call_count >= _PANDAS_QUERY_MAX_CALLS:
@@ -132,14 +143,21 @@ def pandas_query(
         if not n:
             n = 3
         
-        meetings = mdf.get_last_n_meetings(n)
+        # 如果传入了 person_name，则只返回该人参加的最近 N 个会议
+        meetings = mdf.get_last_n_meetings(n=n, person_name=person_name)
         dates = [m["date"] for m in meetings]
-        return json.dumps({
+        meeting_ids = [m["meeting_id"] for m in meetings]
+        result = {
             "query_type": "last_n_meetings",
             "n": n,
+            "person_name": person_name,
             "meetings": meetings,
-            "dates": dates
-        })
+            "dates": dates,
+            "meeting_ids": meeting_ids,
+            "count": len(meetings)
+        }
+        _last_pandas_query_result = result
+        return json.dumps(result)
     
     elif query_type == "date_from_relative":
         if not date_str:
@@ -427,6 +445,173 @@ check_ambiguity_tool = FunctionTool(func=check_ambiguity)
 reset_counter_tool = FunctionTool(func=reset_counter)
 
 
+# ============ Main Entry Point: Three-Stage Pipeline ============
+
+import asyncio
+
+# ADK imports for Stage 3
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.genai import types
+
+
+def rewrite_query(query: str) -> RewriteOutput:
+    """
+    Three-stage Query Rewriter Pipeline (Synchronous Entry)
+    
+    This is the main entry point that orchestrates all three stages:
+    - Stage 1: Detection (synchronous Python function)
+    - Stage 2: Resolution (synchronous Python function)
+    - Stage 3: LLM ReAct (asynchronous, wrapped with asyncio.run)
+    
+    Args:
+        query: Original user query
+        
+    Returns:
+        RewriteOutput with rewritten_query and relevant_meeting_ids
+    """
+    # ===== Stage 1: Detection (Synchronous) =====
+    stage1_result_json = check_ambiguity(query)
+    stage1_result = json.loads(stage1_result_json)
+    
+    # ===== Stage 2: Resolution (Synchronous) =====
+    stage2_result = resolve_entities(query, stage1_result)
+    resolved_query = stage2_result['resolved_query']
+    
+    # ===== Stage 3: LLM ReAct (Asynchronous, wrapped with asyncio.run) =====
+    stage3_result = asyncio.run(_run_stage3_async(resolved_query))
+    
+    return stage3_result
+
+
+async def rewrite_query_async(query: str) -> RewriteOutput:
+    """
+    Three-stage Query Rewriter Pipeline (Async Entry)
+    
+    This is the async entry point for use in async environments like ADK.
+    It avoids the "asyncio.run() cannot be called from a running event loop" error.
+    
+    Args:
+        query: Original user query
+        
+    Returns:
+        RewriteOutput with rewritten_query and relevant_meeting_ids
+    """
+    # ===== Stage 1: Detection (Synchronous) =====
+    stage1_result_json = check_ambiguity(query)
+    stage1_result = json.loads(stage1_result_json)
+    
+    # ===== Stage 2: Resolution (Synchronous) =====
+    stage2_result = resolve_entities(query, stage1_result)
+    resolved_query = stage2_result['resolved_query']
+    
+    # ===== Stage 3: LLM ReAct (Asynchronous, await directly) =====
+    stage3_result = await _run_stage3_async(resolved_query)
+    
+    return stage3_result
+
+
+async def _run_stage3_async(query: str) -> RewriteOutput:
+    """
+    Stage 3: LLM ReAct for handling ambiguous meeting time expressions
+    
+    This async function creates and runs the LLM Agent to handle
+    "last meeting", "recent meeting" type ambiguities by calling pandas_query.
+    
+    Args:
+        query: Query after Stage 2 processing (first-person and absolute times resolved)
+        
+    Returns:
+        RewriteOutput with rewritten_query and relevant_meeting_ids
+    """
+    # Reset counter before running Stage 3
+    reset_pandas_query_counter()
+    
+    # Create session service
+    session_service = InMemorySessionService()
+    
+    # Create session
+    session = await session_service.create_session(
+        app_name="query_rewriter_pipeline",
+        user_id="pipeline_user",
+        session_id="pipeline_session"
+    )
+    
+    # Create runner with the agent
+    runner = Runner(
+        agent=query_rewriter_agent,
+        app_name="query_rewriter_pipeline",
+        session_service=session_service
+    )
+    
+    # Create message as Content object
+    content = types.Content(
+        role='user',
+        parts=[types.Part(text=query)]
+    )
+    
+    # Run agent and collect events
+    final_response = None
+    
+    for event in runner.run(user_id="pipeline_user", session_id="pipeline_session", new_message=content):
+        # Get final response
+        if event.is_final_response() and event.content and event.content.parts:
+            for part in event.content.parts:
+                if hasattr(part, 'text'):
+                    final_response = part.text
+    
+    # Parse final response to get RewriteOutput
+    if final_response:
+        try:
+            # Extract JSON from response (might have markdown code blocks)
+            text = final_response
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0]
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0]
+            
+            parsed = json.loads(text.strip())
+            return RewriteOutput(
+                rewritten_query=parsed.get("rewritten_query", query),
+                relevant_meeting_ids=parsed.get("relevant_meeting_ids", [])
+            )
+        except Exception as e:
+            # If parsing fails, return original query with empty meeting_ids
+            pass
+    
+    # Return default if no response
+    return RewriteOutput(
+        rewritten_query=query,
+        relevant_meeting_ids=[]
+    )
+
+
+# ============ Agent Class ============
+
+class QueryRewriterAgent(LlmAgent):
+    """Single Agent architecture for Query Rewrite - Stage 3 only"""
+    
+    def __init__(self):
+        llm_model = LiteLlm(
+            model="gpt-4o",
+            api_key=OPENAI_API_KEY,
+        )
+        
+        super().__init__(
+            name="QueryRewriteAgent",
+            model=llm_model,
+            instruction=AGENT_INSTRUCTION,
+            description="Rewrite ambiguous user queries into explicit ones",
+            tools=[
+                reset_counter_tool,
+                pandas_query_tool,
+            ],
+            output_schema=RewriteOutput,
+            output_key="rewrite_result",
+            include_contents= "none"
+        )
+
+
 # ============ Agent Instruction ============
 
 AGENT_INSTRUCTION = f"""
@@ -473,12 +658,19 @@ Your job is to ONLY handle remaining ambiguities related to MEETING COUNT:
 5. Return the rewritten query and relevant_meeting_ids
 
 ## Meeting Count Patterns to Handle (ONLY if present in query)
-- "last N meetings" (e.g., "last 3 meetings") → Call pandas_query(query_type="last_n_meetings", n=3)
-- "recent meetings" → Call pandas_query(query_type="last_n_meetings", n=3)
-- "recent N meetings" (e.g., "recent 5 meetings") → Call pandas_query(query_type="last_n_meetings", n=5)
-- "past meetings" → Call pandas_query(query_type="last_n_meetings", n=3)
-- "previous meetings" → Call pandas_query(query_type="last_n_meetings", n=3)
-- "last meeting" (singular) → Call pandas_query(query_type="last_n_meetings", n=1)
+- "last N meetings" (e.g., "last 3 meetings") → Call pandas_query(query_type="last_n_meetings", n=3, person_name="<person_name>")
+- "recent meetings" → Call pandas_query(query_type="last_n_meetings", n=3, person_name="<person_name>")
+- "recent N meetings" (e.g., "recent 5 meetings") → Call pandas_query(query_type="last_n_meetings", n=5, person_name="<person_name>")
+- "past meetings" → Call pandas_query(query_type="last_n_meetings", n=3, person_name="<person_name>")
+- "previous meetings" → Call pandas_query(query_type="last_n_meetings", n=3, person_name="<person_name>")
+- "last meeting" (singular) → Call pandas_query(query_type="last_n_meetings", n=1, person_name="<person_name>")
+
+## CRITICAL: Always pass person_name when available!
+- If the query mentions a specific person (e.g., "What did Hongye Qian discuss in the last 3 meetings?"), 
+  you MUST pass the person_name parameter to pandas_query
+- The person name has already been resolved to full name in Stage 2 (e.g., "Hongye" → "Hongye Qian")
+- Always include person_name to get meetings attended ONLY by that person
+- If no person is mentioned, you can omit person_name or pass null
 
 ## What NOT to Do
 - Do NOT call check_ambiguity (already done in Stage 1)
@@ -491,38 +683,16 @@ Your job is to ONLY handle remaining ambiguities related to MEETING COUNT:
   "relevant_meeting_ids": ["data001", "data002"]
 }}
 
+## CRITICAL: You MUST return meeting_ids in relevant_meeting_ids!
+- If you called pandas_query with query_type="last_n_meetings", you MUST extract meeting_ids from the response and include them in relevant_meeting_ids
+- This is NOT optional - the retrieval depends on this filter
+- Do NOT leave relevant_meeting_ids as empty list if you successfully called pandas_query
+
 ## Important Reminders
 - Think in English, output in English JSON
 - Only handle "last N meetings" type ambiguities
 - meeting_ids are obtained through pandas_query
 """
-
-
-# ============ Agent Class ============
-
-class QueryRewriterAgent(LlmAgent):
-    """Single Agent architecture for Query Rewrite"""
-    
-    def __init__(self):
-        llm_model = LiteLlm(
-            model="gpt-4o-mini",
-            api_key=OPENAI_API_KEY,
-        )
-        
-        super().__init__(
-            name="QueryRewriteAgent",
-            model=llm_model,
-            instruction=AGENT_INSTRUCTION,
-            description="Rewrite ambiguous user queries into explicit ones",
-            tools=[
-                reset_counter_tool,
-                check_ambiguity_tool,
-                pandas_query_tool,
-                # resolve_placeholders_tool,
-            ],
-            output_schema=RewriteOutput,
-            output_key="rewrite_result",
-        )
 
 
 # Create global instance
@@ -537,18 +707,16 @@ if __name__ == "__main__":
     result = check_ambiguity("What did I discuss in the last 3 meetings?")
     print(result)
     
-    # print("\n=== Test pandas_query ===")
-    # result = pandas_query(query_type="get_all_participants")
-    # print(result)
+    # Test new rewrite_query function (Three-Stage Pipeline)
+    print("\n=== Test rewrite_query (Three-Stage Pipeline) ===")
+    result = rewrite_query("What did I discuss yesterday?")
+    print(f"Result: {result}")
+    print(f"  rewritten_query: {result.rewritten_query}")
+    print(f"  relevant_meeting_ids: {result.relevant_meeting_ids}")
     
-    # result = pandas_query(query_type="last_n_meetings", n=3)
-    # print(result)
-    
-    # print("\n=== Test resolve_placeholders ===")
-    # query = "What did [person:Hongye] discuss in [last_n:3]?"
-    # result = resolve_placeholders(
-    #     query=query,
-    #     person_candidates=["Hongye Qian", "Ankit Kumar"],
-    #     meeting_dates=["2025-11-30", "2025-11-29", "2025-11-28"]
-    # )
-    # print(result)
+    # Test with "last meeting" pattern
+    print("\n=== Test rewrite_query with 'last meeting' ===")
+    result = rewrite_query("What did Hongye discuss in the last meeting?")
+    print(f"Result: {result}")
+    print(f"  rewritten_query: {result.rewritten_query}")
+    print(f"  relevant_meeting_ids: {result.relevant_meeting_ids}")

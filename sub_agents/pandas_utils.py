@@ -149,13 +149,31 @@ class MeetingsDataFrame:
         
         return result
     
-    def get_last_n_meetings(self, n: int = 3) -> List[Dict[str, Any]]:
-        """获取最近的 N 个会议"""
+    def get_last_n_meetings(self, n: int = 3, person_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取最近的 N 个会议
+
+        Args:
+            n: 返回的会议数量
+            person_name: 可选参数。如果传入人名，则只返回该人参加的最近 N 个会议
+
+        Returns:
+            会议列表（按日期从新到旧排序）
+        """
         if self.df is None or self.df.empty:
             return []
-        
-        n = min(n, len(self.df))
-        result = self.df.head(n).to_dict("records")
+
+        df_to_use = self.df
+
+        # 如果传入了人名，先按人名筛选
+        if person_name:
+            df_to_use = self.filter_by_person(person_name)
+            if df_to_use.empty:
+                return []
+
+        # 取最近的 N 个会议
+        n = min(n, len(df_to_use))
+        result = df_to_use.head(n).to_dict("records")
         return result
     
     def filter_by_person(self, person_name: str) -> pd.DataFrame:

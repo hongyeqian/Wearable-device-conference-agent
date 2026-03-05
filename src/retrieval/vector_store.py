@@ -27,6 +27,9 @@ class HybridSearchVectorStore:
         # faiss indice for each level
         self.faiss_indices: Dict[str, faiss.Index] ={}
         
+        # keep nList
+        self.faiss_nlist: Dict[str, int] = {}
+        
         # BM25 indices for each level
         self.bm25_indices: Dict[str, BM25Okapi] ={}
         
@@ -82,18 +85,14 @@ class HybridSearchVectorStore:
             # Create IVF index with IndexFlatIP as quantizer
             nlist = min(100, max(1, len(embedding_array) // 10))  # nlist: number of clusters
             quantizer = faiss.IndexFlatIP(self.embedding_dim)
-            index = faiss.IndexIVFFlat(quantizer, self.embedding_dim, nlist)
-            index.metric_type = faiss.METRIC_INNER_PRODUCT
+            index = faiss.IndexIVFFlat(quantizer, self.embedding_dim, nlist, faiss.METRIC_INNER_PRODUCT)
+            # index.metric_type = faiss.METRIC_INNER_PRODUCT
             
             # Train the index before adding vectors
-            if len(embedding_array) >= nlist:
-                index.train(embedding_array)  # type: ignore
-            else:
-                # If not enough vectors for training, use all vectors
-                index.train(embedding_array)  # type: ignore
-            
+            index.train(embedding_array)  # type: ignore            
             index.add(embedding_array)  # type: ignore
             self.faiss_indices[Level] = index
+            self.faiss_nlist[Level] = nlist
             print(f"Created FAISS IVF index for {Level} level (nlist={nlist})")
             
             
@@ -184,6 +183,7 @@ class HybridSearchVectorStore:
             
             # Extract IVF index and use SearchParametersIVF
             ivf_index = faiss.extract_index_ivf(index)  # type: ignore
+            ivf_index.nprobe = self.faiss_nlist.get(level, 1)
             search_params = faiss.SearchParametersIVF()  # type: ignore
             search_params.sel = id_selector  # type: ignore
             
@@ -191,6 +191,8 @@ class HybridSearchVectorStore:
             print(f"searck_k: {search_k} numbers of search k")
             scores, indices = ivf_index.search(query_vector, search_k, params=search_params)  # type: ignore
         else:
+            ivf_index = faiss.extract_index_ivf(index)  # type: ignore
+            ivf_index.nprobe = self.faiss_nlist.get(level, 1)
             scores, indices = index.search(query_vector, min(top_k, index.ntotal))  # type: ignore
         
         # Format results
@@ -228,6 +230,7 @@ class HybridSearchVectorStore:
             query_text: Query text
             level: Level to search
             top_k: Number of results to return
+            allowed_indices: Optional set of allowed indices to search in
             
         Returns:
             List of results with chunk info and BM25 scores
@@ -241,45 +244,69 @@ class HybridSearchVectorStore:
         if not query_tokens:
             return []
         
-        # Get BM25 scores for all documents
-        bm25_scores = self.bm25_indices[level].get_scores(query_tokens)
+        # Determine whether to search all docs or filtered docs
+        search_all = allowed_indices is None or len(allowed_indices) == 0
         
-        # # Get top_k indices
-        # top_indices = np.argsort(bm25_scores)[::-1][:top_k]
-        
-        # Filter scores by allowed_indices if provided
-        if allowed_indices is not None and len(allowed_indices) > 0:
-            effective_top_k = min(top_k, len(allowed_indices))
-            # Create a filtered score array
-            filtered_scores = np.full(len(bm25_scores), -np.inf)
-            for idx in allowed_indices:
-                if 0 <= idx < len(bm25_scores):
-                    filtered_scores[idx] = bm25_scores[idx]
-            
-            # Get top_k indices from filtered scores
-            top_indices = np.argsort(filtered_scores)[::-1][:effective_top_k]
-        else:
-            # Get top_k indices from all scores
+        if search_all:
+            # Search all documents
+            bm25_scores = self.bm25_indices[level].get_scores(query_tokens)
             top_indices = np.argsort(bm25_scores)[::-1][:top_k]
-        
-        # Format results
-        results = []
-        for idx in top_indices:
-            if bm25_scores[idx] <= 0:  # Skip zero scores
-                continue
             
-            # Find corresponding chunk (idx in BM25 corresponds to position in doc_mappings)
-            chunk = self.doc_mapping[level].get(idx)
-            if chunk:
-                results.append({
-                    'chunk_id': chunk.chunk_id,
-                    'meeting_id': chunk.meeting_id,
-                    'level': level,
-                    'text': chunk.text,
-                    'metadata': chunk.metadata,
-                    'bm25_score': float(bm25_scores[idx]),
-                    'index': int(idx)
-                })
+            # Format results using original indices
+            results = []
+            for idx in top_indices:
+                if bm25_scores[idx] <= 0:
+                    continue
+                
+                chunk = self.doc_mapping[level].get(idx)
+                if chunk:
+                    results.append({
+                        'chunk_id': chunk.chunk_id,
+                        'meeting_id': chunk.meeting_id,
+                        'level': level,
+                        'text': chunk.text,
+                        'metadata': chunk.metadata,
+                        'bm25_score': float(bm25_scores[idx]),
+                        'index': int(idx)
+                    })
+        else:
+            # Search only allowed_indices documents for efficiency
+            # Note: allowed_indices is guaranteed to be non-None and non-empty here
+            assert allowed_indices is not None and len(allowed_indices) > 0
+            
+            # Get tokenized documents for allowed indices
+            sorted_allowed = sorted(allowed_indices)
+            allowed_docs = [self.doc_text_tokenized[level][i] for i in sorted_allowed if i < len(self.doc_text_tokenized[level])]
+            
+            if not allowed_docs:
+                return []
+            
+            # Create temporary BM25 index with only allowed documents
+            temp_bm25 = BM25Okapi(allowed_docs)
+            temp_scores = temp_bm25.get_scores(query_tokens)
+            
+            # Map temp indices back to original indices
+            temp_indices = np.argsort(temp_scores)[::-1][:min(top_k, len(temp_scores))]
+            
+            results = []
+            for temp_idx in temp_indices:
+                if temp_scores[temp_idx] <= 0:
+                    continue
+                
+                # Map back to original index
+                original_idx = sorted_allowed[temp_idx]
+                
+                chunk = self.doc_mapping[level].get(original_idx)
+                if chunk:
+                    results.append({
+                        'chunk_id': chunk.chunk_id,
+                        'meeting_id': chunk.meeting_id,
+                        'level': level,
+                        'text': chunk.text,
+                        'metadata': chunk.metadata,
+                        'bm25_score': float(temp_scores[temp_idx]),
+                        'index': int(original_idx)
+                    })
         
         return results
     
@@ -409,14 +436,29 @@ class HybridSearchVectorStore:
     def search_with_meeting_ids_filter(self,
                                    query_text: str,
                                    level: str,
-                                   meeting_ids: Set[str],
+                                   meeting_ids: Optional[Set[str]] = None,
                                    top_k: int = 5) -> List[Dict[str, Any]]:
-
+        """
+        Search with optional meeting ID filtering
+        
+        Args:
+            query_text: Query text
+            level: Level to search (only 'summary' supported)
+            meeting_ids: Optional set of meeting IDs to filter. If None or empty, searches all
+            top_k: Number of results to return
+            
+        Returns:
+            List of search results with hybrid scores
+        """
         if level != 'summary':
             raise ValueError(f"Meeting ID filtering is only supported for 'summary' level, got '{level}'")
         
+        # If meeting_ids is None or empty, search all documents
         if not meeting_ids:
-            return []
+            print("  No meeting IDs provided, searching all documents")
+            vector_results = self._vector_search(query_text, level, top_k)
+            bm25_results = self._bm25_search(query_text, level, top_k)
+            return self._combine_and_rank_results(vector_results, bm25_results, top_k)
         
         relevant_indices = set()
         for meeting_id in meeting_ids:
@@ -424,11 +466,14 @@ class HybridSearchVectorStore:
                 self.meeting_id_to_summary_indices.get(meeting_id, set())
             )
         
+        # If no relevant indices found, search all documents to ensure RAG continues smoothly
         if not relevant_indices:
-            print(f"Warning: no relevant id found for meeting_ids: {meeting_ids}")
-            return []
+            print(f"  Warning: no relevant indices found for meeting_ids: {meeting_ids}, searching all documents")
+            vector_results = self._vector_search(query_text, level, top_k)
+            bm25_results = self._bm25_search(query_text, level, top_k)
+            return self._combine_and_rank_results(vector_results, bm25_results, top_k)
         
-        print(f"  Filtered to {len(relevant_indices)} relevant FAISS indices from {len(meeting_ids)} meeting_ids")
+        print(f"  Filtered to {len(relevant_indices)} relevant indices from {len(meeting_ids)} meeting_ids")
         
         vector_results = self._vector_search(
             query_text, 
@@ -445,15 +490,7 @@ class HybridSearchVectorStore:
         
         return self._combine_and_rank_results(vector_results, bm25_results, top_k)
             
-        
-            
-    
-    
-    
-    
-        
-        
-        
+       
     def search_multi_query(
         self,
         original_query: str,

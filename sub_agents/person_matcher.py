@@ -1,107 +1,68 @@
 """
-人名模糊匹配工具
-使用 Presidio + TheFuzz 进行鲁棒的人名匹配
+Person fuzzy matching utility
+Uses Presidio + TheFuzz for robust person name matching against meeting participants
 """
 from typing import List, Optional, Dict, Any
 from thefuzz import fuzz, process
 
 
-# 名字别名表 - 用于处理同一人的不同写法
-NAME_ALIASES: Dict[str, List[str]] = {
-    "Hongye Qian": ["Hongye", "Qian", "hq", "hqian", "H Qian", "HY Qian"],
-    "Ankit Kumar": ["Ankit", "Kumar", "ak", "akumar", "A Kumar"],
-}
-
-
 class PersonMatcher:
-    """人名模糊匹配器"""
+    """Person fuzzy matcher using Presidio + TheFuzz"""
     
-    def __init__(self, threshold: float = 0.8):
+    def __init__(self, threshold: float = 0.6):
         """
         Args:
-            threshold: 相似度阈值，低于此值认为不匹配
+            threshold: Similarity threshold, below this value considered no match
         """
         self.threshold = threshold
+        self._analyzer = None
     
-    def normalize_name(self, name: str) -> str:
+    def _get_analyzer(self):
+        """Lazy load Presidio analyzer"""
+        if self._analyzer is None:
+            from presidio_analyzer import AnalyzerEngine
+            self._analyzer = AnalyzerEngine()
+        return self._analyzer
+    
+    def detect_person_entities(self, text: str, participants: Optional[List[str]] = None) -> List[str]:
         """
-        标准化名字
+        Detect person entities in text using Presidio
         
         Args:
-            name: 原始名字
+            text: Input text
+            participants: Not used directly - kept for API compatibility
             
         Returns:
-            标准化后的名字
+            List of detected person names from Presidio
         """
-        # 去除首尾空格
-        name = name.strip()
-        
-        # 检查别名表
-        for canonical, aliases in NAME_ALIASES.items():
-            if name.lower() in [a.lower() for a in aliases]:
-                return canonical
-        
-        return name
-    
-    def is_ambiguous(self, name: str, candidates: List[str]) -> bool:
-        """
-        判断名字是否模糊（需要进一步解析）
-        
-        Args:
-            name: 待检查的名字
-            candidates: 候选名字列表
-            
-        Returns:
-            True 如果名字模糊
-        """
-        # 常见模糊词
-        ambiguous_words = {"he", "she", "they", "him", "her", "them", "i", "me", "we", "us"}
-        
-        name_lower = name.lower().strip()
-        
-        # 是模糊词
-        if name_lower in ambiguous_words:
-            return True
-        
-        # 在候选列表中找不到
-        if name not in candidates:
-            # 尝试标准化后查找
-            normalized = self.normalize_name(name)
-            if normalized not in candidates:
-                return True
-        
-        return False
+        analyzer = self._get_analyzer()
+        results = analyzer.analyze(text=text, language='en')
+        persons = [text[ent.start:ent.end] for ent in results if ent.entity_type == "PERSON"]
+        return persons
     
     def find_match(self, fuzzy_name: str, candidates: List[str]) -> Optional[str]:
         """
-        找到最佳匹配
+        Find best match using TheFuzz against candidate list
         
         Args:
-            fuzzy_name: 模糊输入
-            candidates: 候选列表
+            fuzzy_name: Fuzzy input
+            candidates: Candidate list from pandas (meeting participants)
             
         Returns:
-            匹配的名字或 None
+            Matched name or None
         """
         if not candidates:
             return None
         
-        # 先标准化输入
-        normalized = self.normalize_name(fuzzy_name)
-        
-        # 如果标准化后在候选中，直接返回
-        if normalized in candidates:
-            return normalized
-        
-        # 使用 thefuzz 进行模糊匹配
+        # Use TheFuzz for fuzzy matching
         matches = process.extract(
-            normalized,
+            fuzzy_name,
             candidates,
             scorer=fuzz.token_sort_ratio,
             limit=3
         )
         
-        # 检查阈值
+        # Check threshold
         for match_name, score in matches:
             if score / 100 >= self.threshold:
                 return match_name
@@ -110,22 +71,20 @@ class PersonMatcher:
     
     def find_all_matches(self, fuzzy_name: str, candidates: List[str]) -> List[str]:
         """
-        找到所有匹配（多个可能）
+        Find all matches (multiple possibilities)
         
         Args:
-            fuzzy_name: 模糊输入
-            candidates: 候选列表
+            fuzzy_name: Fuzzy input
+            candidates: Candidate list
             
         Returns:
-            所有匹配的名字列表
+            All matched names list
         """
         if not candidates:
             return []
         
-        normalized = self.normalize_name(fuzzy_name)
-        
         matches = process.extract(
-            normalized,
+            fuzzy_name,
             candidates,
             scorer=fuzz.token_sort_ratio,
             limit=5
@@ -138,41 +97,128 @@ class PersonMatcher:
         
         return result
     
+    
+    # Todo: I keep it, future may still needs it.
     def resolve_pronoun(self, pronoun: str, context_participants: List[str]) -> Optional[str]:
         """
-        解析代词
+        Resolve pronoun
         
         Args:
-            pronoun: 代词 (he, she, they 等)
-            context_participants: 上下文中的参与者列表
+            pronoun: Pronoun (he, she, they etc)
+            context_participants: Participants in context
             
         Returns:
-            解析后的人名或 None
+            Resolved person name or None
         """
         pronoun_lower = pronoun.lower().strip()
         
-        # 如果只有一个参与者，直接返回
+        # If only one participant, return directly
         if len(context_participants) == 1:
             return context_participants[0]
         
-        # 多参与者时，代词需要根据上下文判断
-        # 这里暂时返回 None，让 LLM 判断
+        # Multiple participants - pronoun needs context to resolve
         return None
+    
+    def detect_and_resolve(self, text: str, participants: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Detect person entities and resolve to canonical names from meeting participants
+        
+        Flow:
+        1. Use Presidio to detect full person names in text
+        2. Also use TheFuzz to fuzzy match text against pandas participants (handles partial names)
+        3. Combine results and resolve to canonical names
+        
+        Args:
+            text: Input text
+            participants: Participant list from pandas (meeting participants)
+            
+        Returns:
+            Dict with detected entities and resolved names
+        """
+        # Get participants from pandas if not provided
+        if participants is None:
+            from sub_agents.pandas_utils import get_meetings_df
+            mdf = get_meetings_df()
+            participants = mdf.get_all_participants()
+        
+        # Step 1: Detect persons using Presidio (good for full names)
+        detected_by_presidio = self.detect_person_entities(text, participants)
+        
+        # Step 2: Use TheFuzz to find fuzzy matches in text against participants
+        # This handles partial names like "Hongye" -> "Hongye Qian"
+        # Only match if the text length is reasonable (avoid false positives like "weather")
+        detected_by_fuzz = []
+        text_lower = text.lower()
+        for participant in participants:
+            # Skip generic/placeholder names
+            if participant.lower() in ["host", "speaker", "unknown speaker", "speaker 1", "speaker 2", 
+                                        "speaker 3", "speaker 4", "speaker 5"]:
+                continue
+            
+            # Check if any part of the participant name appears in the text
+            parts = participant.split()
+            for part in parts:
+                # Skip short parts (less than 4 chars) to avoid false positives
+                if len(part) < 4:
+                    continue
+                # Use token_set_ratio for better matching
+                match_score = fuzz.token_set_ratio(part.lower(), text_lower)
+                if match_score >= 80:  # Higher threshold for detection
+                    detected_by_fuzz.append(participant)
+                    break
+        
+        # Combine results (union)
+        all_detected = list(set(detected_by_presidio + detected_by_fuzz))
+        
+        # Step 3: Resolve to canonical names using TheFuzz
+        resolved = []
+        for person in all_detected:
+            match = self.find_match(person, participants)
+            if match:
+                resolved.append(match)
+        
+        # Remove duplicates while preserving order
+        resolved = list(dict.fromkeys(resolved))
+        
+        return {
+            "detected": all_detected,
+            "resolved": resolved,
+            "participants": participants
+        }
 
 
-# ============ 测试代码 ============
+# ============ Test Code ============
 if __name__ == "__main__":
-    matcher = PersonMatcher()
+    # Test with mock participants
+    test_participants = [
+        "Hongye Qian", 
+        "Ankit Kumar", 
+        "Jensen Huang", 
+        "Satya Nadella",
+        "Elon Musk"
+    ]
     
-    # 候选列表
-    candidates = ["Hongye Qian", "Ankit Kumar", "Satya Nadella", "Elon Musk", "Nimi Mehta"]
+    matcher = PersonMatcher(threshold=0.6)
     
-    print("Candidates:", candidates)
+    # Test detect_and_resolve
+    print("=== Test detect_and_resolve ===")
+    test_texts = [
+        "What did Hongye discuss?",
+        "What did Ankit and Jensen talk about?",
+        "What did I discuss in the meeting?",
+    ]
     
-    # 测试模糊匹配
-    test_names = ["Hongye", "Qian", "Ankit", "he", "Elon", "Unknown"]
+    for text in test_texts:
+        result = matcher.detect_and_resolve(text, test_participants)
+        print(f"Text: {text}")
+        print(f"  Detected (Presidio): {result['detected']}")
+        print(f"  Resolved (TheFuzz): {result['resolved']}\n")
+    
+    # Test fuzzy matching
+    print("=== Test fuzzy matching ===")
+    test_names = ["Hongye", "Qian", "Ankit", "Jensen", "Unknown"]
     
     for name in test_names:
-        match = matcher.find_match(name, candidates)
-        is_amb = matcher.is_ambiguous(name, candidates)
-        print(f"\n'{name}' -> match: {match}, ambiguous: {is_amb}")
+        match = matcher.find_match(name, test_participants)
+        all_matches = matcher.find_all_matches(name, test_participants)
+        print(f"'{name}' -> best match: {match}, all matches: {all_matches}")

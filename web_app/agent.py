@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from sub_agents.planner_agent import planner_agent
 import sub_agents.query_rewriter_agent as q
-from sub_agents.query_rewriter_agent import query_rewriter_agent
+from sub_agents.query_rewriter_agent import rewrite_query_async, get_last_pandas_query_result
 from sub_agents.answer_agent import answer_synthesis_agent
 from datetime import datetime
 
@@ -113,7 +113,7 @@ class FullRAGSystemAgent(LlmAgent):
     
     
 
-    async def rag_retrieve_func(self, query: str, tool_context: ToolContext, top_k: int = 5) -> Dict[str, Any]:
+    async def rag_retrieve_func(self, query: str, tool_context: ToolContext, top_k: int = 10) -> Dict[str, Any]:
         try:
             tool_context.state["retrieval_chunks"] = []
             plan = tool_context.state.get("plan", {})
@@ -133,19 +133,23 @@ class FullRAGSystemAgent(LlmAgent):
             if not self.initialized:
                 raise RuntimeError("System initialization failed")
 
-            # Get the processed query from the pipeline
-            # Priority: time_rewrite_result > pronoun_rewrite_result > user_query
-            # (Filter Agent handles this same logic, but we need it here for retrieval)
-            time_result = tool_context.state.get("time_rewrite_result")
-            pronoun_result = tool_context.state.get("pronoun_rewrite_result")
+            # Get original query from state
             user_query = tool_context.state.get("user_query", query)
+
+            # Get processed query and meeting IDs from Query Rewriter
+            rewrite_result = tool_context.state.get("rewrite_result", {})
+            processed_query = rewrite_result.get("rewritten_query", user_query)
+            relevant_meeting_ids = rewrite_result.get("relevant_meeting_ids", [])
             
-            # Select the most processed query
-            processed_query = time_result or pronoun_result or user_query
-            
-            # Get filtered meeting IDs from Filter Agent
-            filter_result = tool_context.state.get("filter", {})
-            relevant_meeting_ids = filter_result.get("relevant_meeting_ids", [])
+            # Fallback: If rewrite_result has no meeting_ids but query was rewritten,
+            # try to extract from pandas_query result (in case LLM forgot to include them)
+            if not relevant_meeting_ids and processed_query != user_query:
+                last_query_result = get_last_pandas_query_result()
+                if last_query_result and "meeting_ids" in last_query_result:
+                    extracted_ids = last_query_result.get("meeting_ids", [])
+                    if extracted_ids:
+                        print(f"Extracted meeting_ids from pandas_query result: {extracted_ids}")
+                        relevant_meeting_ids = extracted_ids
             
             # If no filter result or empty list, search all meetings
             if not relevant_meeting_ids:
@@ -168,36 +172,30 @@ class FullRAGSystemAgent(LlmAgent):
                     top_k=top_k * 2  # Get more results since we're filtering
                 )
                 
-                # Also search with simple multi-query approach for better recall
-                # Use the processed_query as the main query
-                results_rewriter = self.retriever.search_with_rewriter(
-                    original_query=processed_query,
-                    query_rewrite={
-                        "normalized_query": processed_query,
-                        "paraphrases": [processed_query],  # Use processed query as paraphrase
-                        "entities": {},  # No pre-extracted entities
-                    },
-                    level="summary",
-                    top_k_vector=5,
-                    top_k_bm25=20,
-                    num_paraphrases=2,
-                )
+                # # Also search with simple multi-query approach for better recall
+                # # Use the processed_query as the main query
+                # results_rewriter = self.retriever.search_with_rewriter(
+                #     original_query=processed_query,
+                #     query_rewrite={
+                #         "normalized_query": processed_query,
+                #         "paraphrases": [processed_query],  # Use processed query as paraphrase
+                #         "entities": {},  # No pre-extracted entities
+                #     },
+                #     level="summary",
+                #     top_k_vector=5,
+                #     top_k_bm25=20,
+                #     num_paraphrases=2,
+                # )
                 
                 # Merge results - keep unique chunks
-                results = results + results_rewriter
+                results = results
             else:
-                # No filter - search all meetings
-                results = self.retriever.search_with_rewriter(
-                    original_query=processed_query,
-                    query_rewrite={
-                        "normalized_query": processed_query,
-                        "paraphrases": [processed_query],
-                        "entities": {},
-                    },
-                    level="summary",
-                    top_k_vector=5,
-                    top_k_bm25=20,
-                    num_paraphrases=2,
+                # No relevant meeting IDs - search all documents
+                results = self.retriever.vector_store.search_with_meeting_ids_filter(
+                    query_text=processed_query,
+                    level='summary',
+                    meeting_ids=None,  # Search all documents
+                    top_k=top_k * 2
                 )
 
             # check if the form suitable for returning
@@ -260,12 +258,69 @@ class FullRAGSystemAgent(LlmAgent):
             "message": tool_context.state["system_message"]
         }
 
+    async def rewrite_query_func(self, query: str, tool_context: ToolContext) -> Dict[str, Any]:
+        """
+        Query Rewrite function - calls the three-stage pipeline asynchronously.
+        
+        This function integrates with the new rewrite_query_async() which:
+        - Stage 1: check_ambiguity (synchronous)
+        - Stage 2: resolve_entities (synchronous)
+        - Stage 3: LLM ReAct via await (async)
+        
+        Returns:
+            Dict with rewritten_query and relevant_meeting_ids
+        """
+        try:
+            # Call the async three-stage pipeline
+            result = await rewrite_query_async(query)
+            
+            # Extract results
+            rewritten_query = result.rewritten_query
+            relevant_meeting_ids = result.relevant_meeting_ids
+            
+            # Fallback: If rewrite_result has no meeting_ids but query was rewritten,
+            # try to extract from pandas_query result (in case LLM forgot to include them)
+            if not relevant_meeting_ids and rewritten_query != query:
+                last_query_result = get_last_pandas_query_result()
+                if last_query_result and "meeting_ids" in last_query_result:
+                    extracted_ids = last_query_result.get("meeting_ids", [])
+                    if extracted_ids:
+                        print(f"Extracted meeting_ids from pandas_query result: {extracted_ids}")
+                        relevant_meeting_ids = extracted_ids
+            
+            print(f"Query rewrite result:")
+            print(f"  Original: {query}")
+            print(f"  Rewritten: {rewritten_query}")
+            print(f"  Meeting IDs: {relevant_meeting_ids}")
+            
+            # Store in state for retrieve_func to use
+            tool_context.state["rewrite_result"] = {
+                "rewritten_query": rewritten_query,
+                "relevant_meeting_ids": relevant_meeting_ids
+            }
+            
+            return {
+                "success": True,
+                "rewritten_query": rewritten_query,
+                "relevant_meeting_ids": relevant_meeting_ids
+            }
+            
+        except Exception as e:
+            print(f"Error in rewrite_query_func: {e}")
+            # On error, return original query
+            return {
+                "success": False,
+                "rewritten_query": query,
+                "relevant_meeting_ids": [],
+                "error": str(e)
+            }
+
     def __init__(self):       
         # create tools
         setup_tool = FunctionTool(func=self.setup_state_func)
         retrieve_tool = FunctionTool(func=self.rag_retrieve_func)
         plan_tool = AgentTool(agent=planner_agent)
-        rewrite_tool = AgentTool(agent=query_rewriter_agent) 
+        rewrite_tool = FunctionTool(func=self.rewrite_query_func) 
         answer_tool = AgentTool(agent=answer_synthesis_agent)
 
         
@@ -284,6 +339,7 @@ Always use the user's latest message as the query.
 State is managed automatically by the sub-agents via their output_keys.
 """,
         tools=[setup_tool, plan_tool,rewrite_tool, retrieve_tool, answer_tool],
+        include_contents= "none"
     )
         
 

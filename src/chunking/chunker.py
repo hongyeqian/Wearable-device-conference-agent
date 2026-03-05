@@ -103,14 +103,14 @@ class HierarchicalChunker:
                 result['meeting'].extend(self.chunk_meeting_level(meeting))
                 
                 if include_chunk_level:
-                    result['chunk'].extend(self.chunk_fine_grained_level(meeting))
+                    result['chunk'].extend(self.chunk_fine_grained_level(meeting))  # this is the raw data
         
         # Print statistics
         self._print_statistics(result)
         
         return result
     
-    
+# this function is for debugging purpose
     def _print_statistics(self, result: Dict[str, List[ChunkMetadata]]):
         """Print chunking statistics"""
         print(f"\n{'='*80}")
@@ -139,7 +139,7 @@ class HierarchicalChunker:
         
         print(f"{'='*80}\n")
 
-
+    # this function is for metadata chunks
     def chunk_metadata_level(self, meeting: Meeting) -> List[ChunkMetadata]:
         """
         Metadata level: convert structured metadata (JSON) to text format for embedding
