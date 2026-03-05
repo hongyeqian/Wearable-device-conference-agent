@@ -24,7 +24,6 @@ class ChunkMetadata:
     level: str
     chunk_id: str
     text: str
-    #metadata: Dict[str, Any]
     metadata: Dict[str, Any]
 
 
@@ -168,9 +167,6 @@ class HierarchicalChunker:
             'meeting_id': meeting.meeting_id,
             'title': meeting.title,
             'datetime': str(meeting.datetime),
-            'duration_sec': meeting.duration_sec,
-            'language': meeting.language,
-            'meeting_type': meeting.meeting_type,
             'participants': meeting.participants,
             'organizations': meeting.organizations,
             'topics': meeting.topics,
@@ -493,7 +489,7 @@ class HierarchicalChunker:
         
         return paragraph_indices
 
-
+    # this function is for raw data, however, we do not use this at current stage. so we keep it first.
     def chunk_fine_grained_level(self, meeting: Meeting) -> List[ChunkMetadata]:
         """
         [LEGACY - NOT RECOMMENDED]
@@ -514,12 +510,6 @@ class HierarchicalChunker:
                 level='chunk',
                 chunk_id=f"{meeting.meeting_id}_chunk_{idx}",
                 text=text,
-                # metadata={
-                #     'title': meeting.title,
-                #     'datetime': str(meeting.datetime),
-                #     'chunk_index': idx,
-                #     'total_chunks': len(text_chunks)
-                # }
                 metadata={}
             ))
         

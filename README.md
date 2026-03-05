@@ -1,73 +1,278 @@
-# Meeting Transcript RAG System (English)
+# Meeting Transcript RAG System
 
-This repository is a modular Retrieval-Augmented Generation (RAG) template focused on meeting transcripts. It provides hierarchical chunking, hybrid retrieval (vector + BM25), and modular agent components for query rewriting and answer generation. Below is a concise guide focused on the `datademo`, `src`, `sub_agents`, and `web_app` folders.
+A Retrieval-Augmented Generation (RAG) system for meeting transcript question answering.
 
-## Key directories (focused)
+## Project Overview
 
-- `datademo/`
-  - Sample meeting data. Each meeting lives in a `conXXX/` subfolder and typically contains:
-    - `metaDataXXX.json` — metadata (participants, datetime, topics, meeting_id)
-    - `dataXXX.md` — raw transcript (timestamped lines or paragraphs)
-    - `meetLevelXXX.md` — topic-level structured content
-    - `summaryXXX.md` — high-level meeting summary
-  - To use your own data, mirror this structure under `datademo/`.
+This system is designed specifically for processing meeting transcript data, providing the following core features:
 
-- `src/` — core implementation
-  - `data_loader/loader.py` — loads and normalizes files from `datademo/`
-  - `chunking/chunker.py` — hierarchical chunking (metadata / summary / meeting)
-  - `embeddings/generator.py` — generates embeddings (OpenAI or other providers)
-  - `retrieval/` — retrieval implementations and utilities
-    - `hierarchical_retriever.py` — main hierarchical retrieval logic
-    - `vector_store.py`, `vector_store_utils.py` — vector store and helpers
-    - `vector_store_es.py` — optional Elasticsearch-backed store
+- **Hierarchical Document Chunking**: Multi-level chunking for metadata, summaries, and meeting content
+- **Hybrid Retrieval**: Combines vector search (FAISS) and BM25 keyword search
+- **Modular Agents**: Decoupled sub-agent design for query rewriting, answer generation, and task planning
+- **Web Interface**: Interactive web interface based on Google ADK
 
-- `sub_agents/` — modular sub-agents
-  - `query_rewriter_agent.py` — rewrites user queries to produce paraphrases/candidates
-  - `answer_agent.py` — merges retrieved contexts and generates final answers with citations
-  - `planner_agent.py` — optional task planner that splits complex tasks into subtasks
-  - These agents are decoupled for reuse in different orchestrations (CLI, web, ADK).
+## Directory Structure
 
-- `web_app/` — agent/web integration
-  - `web_app/agent.py` — example integration for Google ADK / web-based agent interface
-  - The file is a minimal demo; production use requires auth, rate-limiting and hardened error handling.
+```
+DevelopmentRAG/
+├── datademo/                    # Meeting data directory
+│   └── conXXX/                  # Each meeting folder (con1, con2, ...)
+│       ├── metaDataXXX.json     # Meeting metadata
+│       ├── dataXXX.md          # Raw meeting transcript
+│       ├── meetLevelXXX.md     # Topic-level structured content
+│       └── summaryXXX.md       # Meeting summary
+│
+├── src/                        # Core implementation
+│   ├── data_loader/
+│   │   └── loader.py           # Load and normalize data from datademo
+│   ├── chunking/
+│   │   └── chunker.py          # Hierarchical document chunking
+│   ├── embeddings/
+│   │   └── generator.py        # Generate vector embeddings
+│   └── retrieval/
+│       ├── hierarchical_retriever.py    # Main retrieval logic
+│       ├── vector_store.py              # Hybrid vector store (FAISS + BM25)
+│       └── vector_store_utils.py        # Vector store utilities
+│
+├── sub_agents/                 # Sub-agent modules
+│   ├── query_rewriter_agent.py # Query rewriting agent (three-stage process)
+│   ├── answer_agent.py         # Answer generation agent
+│   ├── planner_agent.py        # Task planning agent
+│   ├── pandas_utils.py         # Data processing utilities
+│   ├── date_resolver.py        # Date resolution
+│   └── person_matcher.py       # Person name matching
+│
+├── web_app/                    # Web interface
+│   └── agent.py               # Google ADK Web Agent
+│
+├── config/                     # Configuration
+│   ├── settings.py            # System configuration
+│   └── .env                   # Environment variables (API keys, etc.)
+│
+├── generate/                   # Data generation scripts
+├── test_set/                  # Test cases
+└── requirements.txt            # Dependencies list
+```
 
-## Data format
+## Quick Start
 
-Place each meeting in `datademo/conXXX/` with the four files listed above. The `loader` standardizes these into a document structure used by the chunker and retriever.
+### 1. Environment Setup
 
-## Quick start (developer)
-
-1. Create and activate a virtual environment:
+#### 1.1 Create Virtual Environment (Windows)
 
 ```bash
+# Create virtual environment
 python -m venv .venv
-# Windows
+
+# Activate virtual environment
 .venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Download spaCy language model (for Presidio privacy processing)
+python -m spacy download en_core_web_sm
 ```
 
-2. Prepare data under `datademo/` following the examples.
-3. Run embedding/indexing scripts (see `src/embeddings/generator.py` and `generate/` scripts).
+#### 1.2 Configure Environment Variables
 
-4. Run the example web/agent demo:
+Create a `.env` file in the `config/` directory:
 
 ```bash
-adk web ., and then choose the web_app file.
+# OpenAI API configuration (required)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional configuration
+OPENAI_MODEL=gpt-4o
+EMBEDDING_MODEL=text-embedding-3-small
+
+# Elasticsearch configuration (optional, FAISS is used by default)
+# ELASTICSEARCH_URL=http://localhost:9200
+# ELASTICSEARCH_USERNAME=your_username
+# ELASTICSEARCH_PASSWORD=your_password
 ```
 
-## Configuration notes
+> **Note**: Please visit [OpenAI Platform](https://platform.openai.com/) to get your API key.
 
-- Key settings live in `config/settings.py`. By default `DATA_DIR` points to `datademo`.
-- Set `OPENAI_API_KEY` (or alternate provider credentials) in env or `.env`.
-- FAISS is used by default for development; Elasticsearch is available as an alternative backend.
+### 2. Data Preparation
 
-## Tips and cautions
+Place your meeting data in the `datademo/conXXX/` directory. Each meeting requires the following four files:
 
-- Test with a small subset of data before generating embeddings for the entire dataset.
-- `web_app/agent.py` is a demo integration — add authentication and rate limiting before production use.
-- The sub-agents are intentionally low-coupling; you can replace or extend them for specialized workflows.
+| File | Description | Example |
+|-----|-------------|---------|
+| `metaDataXXX.json` | Meeting metadata | participants, datetime, topics, meeting_id |
+| `dataXXX.md` | Raw meeting transcript | Timestamped dialogues or paragraphs |
+| `meetLevelXXX.md` | Topic-level structured content | Meeting content organized by topic |
+| `summaryXXX.md` | Meeting summary | High-level summary |
 
-## Contribution & next steps
+Refer to the sample data in the `datademo/con1/` directory.
 
-1. Will find out solution for query rewrite agent, maybe a reward model will help.
+### 3. Generate Vector Index
 
+Run the embedding generation script (refer to `src/embeddings/generator.py`):
+
+```bash
+# Example: Run data generation script
+python generate/your_embedding_script.py
+```
+
+### 4. Start Web Service
+
+```bash
+# Start web interface using Google ADK
+adk web .
+```
+
+After starting, access the displayed address in your browser (typically `http://localhost:8000`), select the Agent from the `web_app` directory, and you can start using the system.
+
+## Core Modules
+
+### 1. Data Loader (`src/data_loader/loader.py`)
+
+Responsible for loading meeting data from the `datademo/` directory and normalizing it into a unified document structure.
+
+**Core Classes**:
+- `Meeting`: Meeting data model
+- `DataLoader`: Data loader
+
+### 2. Hierarchical Chunker (`src/chunking/chunker.py`)
+
+Chunks meeting documents hierarchically:
+- **Metadata Chunk**: Meeting participants, time, topics
+- **Summary Chunk**: High-level meeting summary
+- **Meeting Chunk**: Detailed meeting content
+
+**Configuration Parameters** (in `config/settings.py`):
+- `CHUNK_SIZE=800`: Chunk size
+- `CHUNK_OVERLAP=120`: Chunk overlap
+- `ONLY_SUMMARY=True`: Whether to process summary level only
+
+### 3. Vector Store (`src/retrieval/vector_store.py`)
+
+Hybrid retrieval implementation combining two methods:
+- **FAISS Vector Search**: Semantic similarity-based
+- **BM25 Keyword Search**: Term frequency-based
+
+### 4. Query Rewriter Agent (`sub_agents/query_rewriter_agent.py`)
+
+**Three-stage Query Rewriting Process**:
+
+```
+User's Original Query
+    │
+    ├─► Stage 1: Ambiguity Check (check_ambiguity)
+    │       Detects whether names, dates, etc. in the query are explicit
+    │       Example: "that meeting" → needs to determine which specific meeting
+    │
+    ├─► Stage 2: Pandas Query (pandas_query)
+    │       Retrieves candidate meetings from meeting catalog
+    │       Example: Find meetings containing specific person
+    │
+    └─► Stage 3: Placeholder Resolution (resolve_placeholders)
+            Resolves ambiguous references to specific entities
+            Example: "last month" → "2024-01"
+```
+
+**Core Functions**:
+- `check_ambiguity()`: Detect query ambiguity
+- `pandas_query()`: Generate Pandas query to get candidate meetings
+- `resolve_placeholders()`: Resolve time, person name, and other placeholders
+- `rewrite_query_async()`: Execute complete rewriting process asynchronously
+
+### 5. Answer Agent (`sub_agents/answer_agent.py`)
+
+Merges retrieved contexts to generate final answers with citation sources.
+
+### 6. Planner Agent (`sub_agents/planner_agent.py`)
+
+Splits complex tasks into subtasks and coordinates multiple agents to complete complex queries.
+
+## Configuration Reference
+
+### Complete `.env` Example
+
+```bash
+# ========== OpenAI Configuration ==========
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENAI_MODEL=gpt-4o
+EMBEDDING_MODEL=text-embedding-3-small
+
+# ========== Elasticsearch Configuration (Optional) ==========
+# ELASTICSEARCH_URL=http://localhost:9200
+# ELASTICSEARCH_USERNAME=elastic
+# ELASTICSEARCH_PASSWORD=your_password
+# ELASTICSEARCH_INDEX_PREFIX=meeting_rag
+
+# ========== Application Configuration ==========
+APP_NAME=agents
+DATA_DIR=datademo
+```
+
+### Core Configuration Items (`config/settings.py`)
+
+| Configuration | Default | Description |
+|--------------|---------|-------------|
+| `CHUNK_SIZE` | 800 | Chunk size |
+| `CHUNK_OVERLAP` | 120 | Chunk overlap |
+| `ONLY_SUMMARY` | True | Process summary only |
+| `TOP_K_SUMMARY` | 3 | Number of summary retrievals |
+| `TOP_K_MEETING` | 3 | Number of meeting retrievals |
+| `TOP_K_CHUNK` | 5 | Number of content chunk retrievals |
+
+## Troubleshooting
+
+### Q1: "OPENAI_API_KEY not found" on startup
+
+**Solution**:
+1. Ensure `config/.env` file exists and contains the correct API key
+2. Verify the API key has not expired or been revoked
+3. Check if environment variables are loaded correctly
+
+### Q2: Empty vector retrieval results
+
+**Possible causes**:
+1. Vector index not generated yet → Run embedding generation script
+2. Query content not related to indexed data → Check data directory
+3. Incorrect Embedding model configuration → Verify `EMBEDDING_MODEL` setting
+
+### Q3: Query rewriting results not as expected
+
+**Suggestions**:
+1. Check if data in `datademo/` is complete
+2. Verify if meeting catalog in `pandas_utils.py` is generated correctly
+3. Check specific error messages in logs
+
+### Q4: spaCy model download fails
+
+**Solution**:
+```bash
+# Manual download
+python -m spacy download en_core_web_sm
+
+# Or use Chinese mirror
+pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+```
+
+### Q5: FAISS index fails to load
+
+**Possible causes**:
+1. Index file corrupted → Regenerate index
+2. Path configuration error → Check `VECTOR_STORE_DIR` setting
+
+### Q6: Elasticsearch connection fails
+
+**Check items**:
+1. Is Elasticsearch service running?
+2. Are URL, username, and password correct?
+3. Can network access Elasticsearch port (default 9200)?
+
+## Future Improvements
+
+1. **Query Rewriter Agent**: Introduce reward model to improve rewriting quality
+2. **Evaluation Framework**: Integrate RAGAs and other evaluation tools
+3. **Multi-modal Support**: Support audio and video meeting recordings
+4. **Enterprise Deployment**: Add authentication, rate limiting, and other production features
+
+## License
+
+MIT License

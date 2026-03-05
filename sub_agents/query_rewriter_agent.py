@@ -20,7 +20,7 @@ sys.path.insert(0, str(project_root))
 # Import utilities
 import dateparser
 from sub_agents.pandas_utils import get_meetings_df
-# from sub_agents.placeholder_utils import PlaceholderResolver
+
 from sub_agents.date_resolver import DateResolver
 from sub_agents.person_matcher import PersonMatcher
 
@@ -143,7 +143,7 @@ def pandas_query(
         if not n:
             n = 3
         
-        # 如果传入了 person_name，则只返回该人参加的最近 N 个会议
+        # if apper someone's name, return his/her recent N meetings
         meetings = mdf.get_last_n_meetings(n=n, person_name=person_name)
         dates = [m["date"] for m in meetings]
         meeting_ids = [m["meeting_id"] for m in meetings]
@@ -169,8 +169,6 @@ def pandas_query(
             "query_type": "date_from_relative",
             "input": date_str,
             "resolved": resolved,
-            # "is_relative": resolver.is_relative(date_str),
-            # "needs_year": resolver.needs_year(date_str) if resolved is None else False
         })
     
     elif query_type == "filter_by_person":
@@ -234,43 +232,6 @@ def pandas_query(
     else:
         return json.dumps({"error": f"Unknown query_type: {query_type}"})
 
-
-# def resolve_placeholders(
-#     query: str,
-#     person_candidates: Optional[List[str]] = None,
-#     meeting_dates: Optional[List[str]] = None,
-# ) -> str:
-#     """
-#     Placeholder resolution tool
-    
-#     Args:
-#         query: Query containing placeholders
-#         person_candidates: Person name candidates list
-#         meeting_dates: Meeting dates list
-    
-#     Returns:
-#         JSON formatted resolution result
-#     """
-#     if person_candidates is None:
-#         person_candidates = []
-#     if meeting_dates is None:
-#         meeting_dates = []
-    
-#     resolver = PlaceholderResolver(current_user=CURRENT_USER)
-#     context = {
-#         "person_candidates": person_candidates,
-#         "meeting_dates": meeting_dates
-#     }
-    
-#     resolved_query = resolver.resolve_all(query, context)
-#     has_placeholders = resolver.has_placeholders(resolved_query)
-    
-#     return json.dumps({
-#         "original_query": query,
-#         "resolved_query": resolved_query,
-#         "has_placeholders": has_placeholders,
-#         "remaining_placeholders": resolver.extract_placeholders(resolved_query) if has_placeholders else []
-#     })
 
 
 def check_ambiguity(query: str) -> str:
@@ -437,8 +398,6 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
 # ============ Create Tools ============
 
 pandas_query_tool = FunctionTool(func=pandas_query)
-
-# resolve_placeholders_tool = FunctionTool(func=resolve_placeholders)
 
 check_ambiguity_tool = FunctionTool(func=check_ambiguity)
 

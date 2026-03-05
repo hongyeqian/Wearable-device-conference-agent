@@ -1,6 +1,6 @@
 """
-扁平化 DataFrame 工具
-用于将会议元数据转换为扁平化的 pandas DataFrame，方便查询
+Flat DataFrame utility
+Converts meeting metadata into a flat pandas DataFrame for easy querying
 """
 import json
 import pandas as pd
@@ -10,14 +10,14 @@ from config.settings import DATA_DIR
 
 
 class MeetingsDataFrame:
-    """会议元数据的扁平化 DataFrame"""
+    """Flat DataFrame for meeting metadata"""
     
     def __init__(self):
         self.df: Optional[pd.DataFrame] = None
         self._load_data()
     
     def _load_data(self) -> None:
-        """从 DATA_DIR 加载所有 summary_metadata.json 并转换为扁平化 DataFrame"""
+        """Load all summary_metadata.json from DATA_DIR and convert to flat DataFrame"""
         data_dir = Path(DATA_DIR)
         records = []
         
@@ -31,7 +31,7 @@ class MeetingsDataFrame:
                     with open(summary_meta_file, 'r', encoding='utf-8') as f:
                         metadata = json.load(f)
                     
-                    # 扁平化
+                    # Flatten metadata
                     record = {
                         "meeting_id": metadata.get("meeting_id", ""),
                         "datetime": metadata.get("datetime", ""),
@@ -45,7 +45,7 @@ class MeetingsDataFrame:
                         "topics_str": "; ".join(metadata.get("topics", [])),
                     }
                     
-                    # 处理 actions
+                    # Process actions
                     actions = metadata.get("actions", [])
                     action_tasks = [a.get("task", "") for a in actions if a.get("task")]
                     record["action_tasks"] = action_tasks
@@ -57,16 +57,16 @@ class MeetingsDataFrame:
                     print(f"Warning: Failed to load {summary_meta_file}: {e}")
         
         self.df = pd.DataFrame(records)
-        # 按日期排序（从新到旧）
+        # Sort by date (newest first)
         if not self.df.empty:
             self.df = self.df.sort_values("date", ascending=False).reset_index(drop=True)
     
     def _extract_date(self, datetime_str: str) -> str:
-        """从 ISO datetime 字符串提取日期"""
+        """Extract date from ISO datetime string"""
         if not datetime_str:
             return ""
         try:
-            # 处理时区
+            # Handle timezone
             dt = datetime_str.replace("+08:00", "").replace("Z", "")
             if "T" in dt:
                 return dt.split("T")[0]
@@ -75,7 +75,7 @@ class MeetingsDataFrame:
             return ""
     
     def _extract_year(self, datetime_str: str) -> Optional[int]:
-        """提取年份"""
+        """Extract year"""
         date = self._extract_date(datetime_str)
         if date:
             try:
@@ -85,7 +85,7 @@ class MeetingsDataFrame:
         return None
     
     def _extract_month(self, datetime_str: str) -> Optional[int]:
-        """提取月份"""
+        """Extract month"""
         date = self._extract_date(datetime_str)
         if date:
             try:
@@ -95,7 +95,7 @@ class MeetingsDataFrame:
         return None
     
     def _extract_day(self, datetime_str: str) -> Optional[int]:
-        """提取日"""
+        """Extract day"""
         date = self._extract_date(datetime_str)
         if date:
             try:
@@ -105,7 +105,7 @@ class MeetingsDataFrame:
         return None
     
     def get_all_participants(self) -> List[str]:
-        """获取所有参与者（去重）"""
+        """Get all unique participants"""
         if self.df is None or self.df.empty:
             return []
         all_parts = []
@@ -116,14 +116,14 @@ class MeetingsDataFrame:
     
     def find_person(self, fuzzy_name: str, threshold: float = 0.6) -> List[str]:
         """
-        模糊匹配人名
+        Fuzzy match person name
         
         Args:
-            fuzzy_name: 模糊输入（如 "Hongye", "hq", "he"）
-            threshold: 相似度阈值
+            fuzzy_name: Fuzzy input (e.g., "Hongye", "hq", "he")
+            threshold: Similarity threshold
             
         Returns:
-            匹配的参与者列表
+            List of matched participants
         """
         if self.df is None or self.df.empty:
             return []
@@ -133,7 +133,7 @@ class MeetingsDataFrame:
         
         all_participants = self.get_all_participants()
         
-        # 使用 thefuzz 进行模糊匹配
+        # Use thefuzz for fuzzy matching
         matches = process.extract(
             fuzzy_name, 
             all_participants, 
@@ -141,7 +141,7 @@ class MeetingsDataFrame:
             limit=3
         )
         
-        # 过滤低于阈值的匹配
+        # Filter matches below threshold
         result = []
         for match_name, score in matches:
             if score / 100 >= threshold:
@@ -151,44 +151,44 @@ class MeetingsDataFrame:
     
     def get_last_n_meetings(self, n: int = 3, person_name: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        获取最近的 N 个会议
-
+        Get the last N meetings
+        
         Args:
-            n: 返回的会议数量
-            person_name: 可选参数。如果传入人名，则只返回该人参加的最近 N 个会议
-
+            n: Number of meetings to return
+            person_name: Optional. If provided, returns only meetings attended by this person
+        
         Returns:
-            会议列表（按日期从新到旧排序）
+            List of meetings (sorted by date, newest first)
         """
         if self.df is None or self.df.empty:
             return []
-
+        
         df_to_use = self.df
-
-        # 如果传入了人名，先按人名筛选
+        
+        # If person_name is provided, filter by person first
         if person_name:
             df_to_use = self.filter_by_person(person_name)
             if df_to_use.empty:
                 return []
-
-        # 取最近的 N 个会议
+        
+        # Get the last N meetings
         n = min(n, len(df_to_use))
         result = df_to_use.head(n).to_dict("records")
         return result
     
     def filter_by_person(self, person_name: str) -> pd.DataFrame:
-        """按人名筛选会议"""
+        """Filter meetings by person name"""
         if self.df is None or self.df.empty:
             return pd.DataFrame()
         
-        # 检查 participants 列表中是否包含该人名
+        # Check if person name is in participants list
         mask = self.df["participants"].apply(
             lambda x: person_name in x if isinstance(x, list) else False
         )
         return self.df[mask]
     
     def filter_by_date_range(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
-        """按日期范围筛选"""
+        """Filter by date range"""
         if self.df is None or self.df.empty:
             return pd.DataFrame()
         
@@ -202,7 +202,7 @@ class MeetingsDataFrame:
         return self.df[mask]
     
     def filter_by_year_month(self, year: Optional[int] = None, month: Optional[int] = None) -> pd.DataFrame:
-        """按年月筛选"""
+        """Filter by year and/or month"""
         if self.df is None or self.df.empty:
             return pd.DataFrame()
         
@@ -216,25 +216,25 @@ class MeetingsDataFrame:
         return self.df[mask]
     
     def to_dict(self) -> List[Dict[str, Any]]:
-        """转换为字典列表"""
+        """Convert to list of dicts"""
         if self.df is None:
             return []
         return self.df.to_dict("records")
 
 
-# 全局实例
+# Global instance
 _meetings_df: Optional[MeetingsDataFrame] = None
 
 
 def get_meetings_df() -> MeetingsDataFrame:
-    """获取全局 MeetingsDataFrame 实例"""
+    """Get global MeetingsDataFrame instance"""
     global _meetings_df
     if _meetings_df is None:
         _meetings_df = MeetingsDataFrame()
     return _meetings_df
 
 
-# ============ 测试代码 ============
+# ============ Test Code ============
 if __name__ == "__main__":
     mdf = get_meetings_df()
     print(f"Loaded {len(mdf.df)} meetings")

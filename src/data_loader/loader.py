@@ -15,10 +15,6 @@ class Meeting:
     meeting_id: str
     title: str
     datetime: datetime
-    duration_sec: int
-    language: str
-    source_url: str
-    meeting_type: str
     participants: List[Dict[str, Any]]
     organizations: List[str]
     topics: List[str]
@@ -86,10 +82,6 @@ class DataLoader:
             meeting_id=metadata['meeting_id'],
             title=metadata['title'],
             datetime=metadata['datetime'],
-            duration_sec=metadata['duration_sec'],
-            language=metadata['language'],
-            source_url=metadata['source_url'],
-            meeting_type=metadata['meeting_type'],
             participants=metadata['participants'],
             organizations=metadata['organizations'],
             topics=metadata['topics'],
@@ -295,16 +287,12 @@ if __name__ == "__main__":
         print(f"1.  meeting_id: {m.meeting_id}")
         print(f"2.  title: {m.title}")
         print(f"3.  datetime: {m.datetime}")
-        print(f"4.  duration_sec: {m.duration_sec}")
-        print(f"5.  language: {m.language}")
-        print(f"6.  source_url: {m.source_url}")
-        print(f"7.  meeting_type: {m.meeting_type}")
-        print(f"8.  participants: {m.participants}")
-        print(f"9.  organizations: {m.organizations}")
-        print(f"10. topics: {m.topics}")
-        print(f"11. keywords: {m.keywords}")
-        print(f"12. summary_brief: {m.summary_brief}")
-        print(f"13. conversation_text: {m.conversation_text[:100]}...")
-        print(f"14. meeting_level_text: {m.meeting_level_text[:100]}...")
-        print(f"15. summary_text: {m.summary_text[:100]}...")
-        print(f"16. metadata: {m.metadata}")
+        print(f"4.  participants: {m.participants}")
+        print(f"5.  organizations: {m.organizations}")
+        print(f"6.  topics: {m.topics}")
+        print(f"7.  keywords: {m.keywords}")
+        print(f"8.  summary_brief: {m.summary_brief}")
+        print(f"9.  conversation_text: {m.conversation_text[:100]}...")
+        print(f"10. meeting_level_text: {m.meeting_level_text[:100]}...")
+        print(f"11. summary_text: {m.summary_text[:100]}...")
+        print(f"12. metadata: {m.metadata}")

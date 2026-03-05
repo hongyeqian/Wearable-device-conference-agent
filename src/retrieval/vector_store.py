@@ -1,13 +1,15 @@
+"""
+Hybrid Search Vector Store combining FAISS vector search with BM25 keyword search.
+Supports hierarchical retrieval across metadata, summary, and meeting levels.
+"""
 from typing import List, Dict, Any, Optional, Set
 import numpy as np
 import faiss
 from rank_bm25 import BM25Okapi
 import re
-import pickle
 from pathlib import Path
 
 import sys
-from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -17,27 +19,41 @@ from config.settings import EMBEDDING_MODEL
 
 
 class HybridSearchVectorStore:
-    def __init__(self, embedding_generator: Optional[EmbeddingGenerator]= None, alpha: float =0.6):
+    """
+    Hybrid vector store combining FAISS (vector search) with BM25 (keyword search).
+    
+    Supports three index levels:
+    - metadata: Meeting metadata level
+    - summary: Summary level chunks
+    - meeting: Meeting level chunks
+    
+    Uses alpha parameter to weight vector vs BM25 scores in final ranking.
+    """
+    
+    def __init__(self, embedding_generator: Optional[EmbeddingGenerator] = None, alpha: float = 0.6):
         
         self.embedding_generator = embedding_generator or EmbeddingGenerator()
         self.embedding_dim = self.embedding_generator.get_embedding_dimension()
         
         self.alpha = alpha
         
-        # faiss indice for each level
-        self.faiss_indices: Dict[str, faiss.Index] ={}
+        # FAISS indices for each level
+        self.faiss_indices: Dict[str, faiss.Index] = {}
         
-        # keep nList
+        # Number of clusters (nlist) for each level's IVF index
         self.faiss_nlist: Dict[str, int] = {}
         
+        # Number of clusters to probe (nprobe) during search - controls speed vs accuracy
+        self.faiss_nprobe: Dict[str, int] = {}
+        
         # BM25 indices for each level
-        self.bm25_indices: Dict[str, BM25Okapi] ={}
+        self.bm25_indices: Dict[str, BM25Okapi] = {}
         
         
-        # mapping back to the chunkmetadata
+        # Mapping back to the chunk metadata
         self.doc_mapping: Dict[str, Dict[int, ChunkMetadata]] = {
-            'metadata':{},
-            'summary':{},
+            'metadata': {},
+            'summary': {},
             'meeting': {}
         }
         
@@ -47,31 +63,49 @@ class HybridSearchVectorStore:
             'meeting': []
         }
         
+        # Inverted indices for filtering
         self.meeting_id_to_summary_indices: Dict[str, Set[int]] = {}
         self.entry_id_to_meeting_indices: Dict[str, Set[int]] = {}
         
-    def _tokenize(self, text: str):
-        # lowercase, split by whitespace and punctuation
+    def _tokenize(self, text: str) -> List[str]:
+        """
+        Tokenize text for BM25 search.
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            List of lowercase tokens
+        """
+        # Lowercase, split by whitespace and punctuation
         tokens = re.findall(r'\b\w+\b', text.lower())
         return tokens
         
         
     def add_chunks(self, chunks: List[ChunkMetadata],
-                    Level: str,
-                    generate_embedding: bool):
-        if Level not in ['metadata', 'summary', 'meeting']:
-            raise ValueError(f"Invalid level: {Level}")
+                   level: str,
+                   generate_embedding: bool):
+        """
+        Add chunks to the vector store.
+        
+        Args:
+            chunks: List of ChunkMetadata objects
+            level: Index level ('metadata', 'summary', 'meeting')
+            generate_embedding: Whether to generate embeddings
+        """
+        if level not in ['metadata', 'summary', 'meeting']:
+            raise ValueError(f"Invalid level: {level}")
         
         if not chunks:
-            print(f"No chunks in the {Level}")
+            print(f"No chunks in the {level}")
             return
             
             
-        print(f"Adding {len(chunks)} chunks to {Level} level")
+        print(f"Adding {len(chunks)} chunks to {level} level")
         
         
         if generate_embedding:
-            print(f"Generate embeddings...")
+            print(f"Generating embeddings...")
             embeddings = self.embedding_generator.generate_chunks_embeddings(chunks)
         else:
             raise ValueError("Embedding must be generated for FAISS index")
@@ -79,37 +113,56 @@ class HybridSearchVectorStore:
         embedding_array = np.array([emb.tolist() for emb in embeddings]).astype('float32')
         
         
-        if Level not in self.faiss_indices:
+        if level not in self.faiss_indices:
             faiss.normalize_L2(embedding_array)
             
-            # Create IVF index with IndexFlatIP as quantizer
-            nlist = min(100, max(1, len(embedding_array) // 10))  # nlist: number of clusters
-            quantizer = faiss.IndexFlatIP(self.embedding_dim)
-            index = faiss.IndexIVFFlat(quantizer, self.embedding_dim, nlist, faiss.METRIC_INNER_PRODUCT)
-            # index.metric_type = faiss.METRIC_INNER_PRODUCT
+            # Choose index type based on data size
+            # - Flat index: exact search, better for small datasets (< 1000 vectors)
+            # - IVF index: approximate search, better for large datasets
+            data_size = len(embedding_array)
             
-            # Train the index before adding vectors
-            index.train(embedding_array)  # type: ignore            
-            index.add(embedding_array)  # type: ignore
-            self.faiss_indices[Level] = index
-            self.faiss_nlist[Level] = nlist
-            print(f"Created FAISS IVF index for {Level} level (nlist={nlist})")
+            # Todo: here maybe some problems, I have not sure about this.
+            if data_size >= 1000:
+                # Use IVF index for large datasets
+                nlist = min(100, max(1, data_size // 10))
+                quantizer = faiss.IndexFlatIP(self.embedding_dim)
+                index = faiss.IndexIVFFlat(quantizer, self.embedding_dim, nlist, faiss.METRIC_INNER_PRODUCT)
+                
+                # Train the index before adding vectors
+                index.train(embedding_array)  # type: ignore            
+                index.add(embedding_array)  # type: ignore
+                
+                self.faiss_indices[level] = index
+                self.faiss_nlist[level] = nlist
+                self.faiss_nprobe[level] = 1  # Default: probe 1 cluster for fast search
+                
+                print(f"Created FAISS IVF index for {level} level (nlist={nlist}, nprobe={self.faiss_nprobe[level]})")
+            else:
+                # Use Flat index for small datasets (exact search, no quantization loss)
+                index = faiss.IndexFlatIP(self.embedding_dim)
+                index.add(embedding_array)  # type: ignore
+                
+                self.faiss_indices[level] = index
+                self.faiss_nlist[level] = 0  # 0 indicates flat index
+                self.faiss_nprobe[level] = 0  # Not applicable for flat index
+                
+                print(f"Created FAISS Flat index for {level} level (exact search)")
             
             
         else:
             faiss.normalize_L2(embedding_array)
-            self.faiss_indices[Level].add(embedding_array)  # type: ignore
-            print(f"Updated FAISS index for {Level} level")
+            self.faiss_indices[level].add(embedding_array)  # type: ignore
+            print(f"Updated FAISS index for {level} level")
             
-        # store FAISS mapping
-        current_size = len(self.doc_mapping[Level])
+        # Store FAISS mapping
+        current_size = len(self.doc_mapping[level])
         for idx, chunk in enumerate(chunks):
             global_idx = current_size + idx
-            self.doc_mapping[Level][current_size+idx] = chunk
+            self.doc_mapping[level][current_size + idx] = chunk
             
             
-        # Building meeting_id -> summary_indice mapping
-            if Level=='summary':
+        # Building meeting_id -> summary_indices mapping
+            if level == 'summary':
                 meeting_id = chunk.meeting_id
                 if meeting_id:
                     if meeting_id not in self.meeting_id_to_summary_indices:
@@ -117,42 +170,42 @@ class HybridSearchVectorStore:
                     self.meeting_id_to_summary_indices[meeting_id].add(global_idx)
                     
                     
-            elif Level == 'meeting':
+            elif level == 'meeting':
                 entry_id = chunk.metadata.get('entry_id')
                 if entry_id:
                     if entry_id not in self.entry_id_to_meeting_indices:
                         self.entry_id_to_meeting_indices[entry_id] = set()
                     self.entry_id_to_meeting_indices[entry_id].add(global_idx)
             
-        # build BM25 mapping
+        # Build BM25 mapping
         tokenized_docs = []
         for chunk in chunks:
             tokens = self._tokenize(chunk.text)
             tokenized_docs.append(tokens)
-            self.doc_text_tokenized[Level].append(tokens)
+            self.doc_text_tokenized[level].append(tokens)
             
         if tokenized_docs:
-            if Level not in self.bm25_indices:
-                self.bm25_indices[Level] = BM25Okapi(tokenized_docs)
-                print(f" Created BM25 index for {Level} level")
+            if level not in self.bm25_indices:
+                self.bm25_indices[level] = BM25Okapi(tokenized_docs)
+                print(f"Created BM25 index for {level} level")
             else:
                 # BM25 doesn't support incremental updates easily, rebuild
                 # For now, we'll rebuild the entire index
-                all_tokenized = self.doc_text_tokenized[Level]
-                self.bm25_indices[Level] = BM25Okapi(all_tokenized)
-                print(f" Rebuilt BM25 index for {Level} level")
+                all_tokenized = self.doc_text_tokenized[level]
+                self.bm25_indices[level] = BM25Okapi(all_tokenized)
+                print(f"Rebuilt BM25 index for {level} level")
         
-        print(f"  Successfully indexed {len(chunks)} {Level} chunks")
+        print(f"Successfully indexed {len(chunks)} {level} chunks")
         
         
         
     def _vector_search(self,
-                      query_text: str,
-                      level: str,
-                      top_k: int,
-                      allowed_indices: Optional[Set[int]] = None) -> List[Dict[str, Any]]:
+                       query_text: str,
+                       level: str,
+                       top_k: int,
+                       allowed_indices: Optional[Set[int]] = None) -> List[Dict[str, Any]]:
         """
-        Perform vector search using FAISS (STEP 2A & 3A in diagram)
+        Perform vector search using FAISS.
         
         Args:
             query_text: Query text
@@ -176,24 +229,48 @@ class HybridSearchVectorStore:
         # Search in FAISS
         index = self.faiss_indices[level]
         
-        # Use SearchParametersIVF with IDSelectorArray for filtering
-        if allowed_indices is not None and len(allowed_indices) > 0:
+        # Check if this is an IVF index or Flat index
+        is_ivf = self.faiss_nlist.get(level, 0) > 0
+        
+        # Todo: here may be some problems, I have not consider it.
+        # Use SearchParametersIVF with IDSelectorArray for filtering (IVF only)
+        if is_ivf and allowed_indices is not None and len(allowed_indices) > 0:
             allowed_ids = np.array(sorted(allowed_indices), dtype=np.int64)
             id_selector = faiss.IDSelectorArray(len(allowed_ids), faiss.swig_ptr(allowed_ids))
             
             # Extract IVF index and use SearchParametersIVF
             ivf_index = faiss.extract_index_ivf(index)  # type: ignore
-            ivf_index.nprobe = self.faiss_nlist.get(level, 1)
+            ivf_index.nprobe = self.faiss_nprobe.get(level, 1)
             search_params = faiss.SearchParametersIVF()  # type: ignore
             search_params.sel = id_selector  # type: ignore
             
             search_k = min(top_k, len(allowed_ids), index.ntotal)
-            print(f"searck_k: {search_k} numbers of search k")
+            print(f"search_k: {search_k} numbers of search k")
             scores, indices = ivf_index.search(query_vector, search_k, params=search_params)  # type: ignore
-        else:
+        elif is_ivf:
+            # IVF index without filtering
             ivf_index = faiss.extract_index_ivf(index)  # type: ignore
-            ivf_index.nprobe = self.faiss_nlist.get(level, 1)
+            ivf_index.nprobe = self.faiss_nprobe.get(level, 1)
             scores, indices = index.search(query_vector, min(top_k, index.ntotal))  # type: ignore
+        else:
+            # Flat index - simple search (no IVF parameters)
+            if allowed_indices is not None and len(allowed_indices) > 0:
+                # For flat index with filtering, search all and filter results
+                scores, indices = index.search(query_vector, index.ntotal)  # type: ignore
+                
+                # Filter results to only include allowed indices
+                filtered_scores = []
+                filtered_indices = []
+                for score, idx in zip(scores[0], indices[0]):
+                    if idx != -1 and idx in allowed_indices:
+                        filtered_scores.append(score)
+                        filtered_indices.append(idx)
+                
+                scores = [filtered_scores[:top_k]]
+                indices = [filtered_indices[:top_k]]
+            else:
+                # Flat index without filtering
+                scores, indices = index.search(query_vector, min(top_k, index.ntotal))  # type: ignore
         
         # Format results
         results = []
@@ -224,7 +301,7 @@ class HybridSearchVectorStore:
                      top_k: int,
                      allowed_indices: Optional[Set[int]] = None) -> List[Dict[str, Any]]:
         """
-        Perform BM25 keyword search
+        Perform BM25 keyword search.
         
         Args:
             query_text: Query text
@@ -311,9 +388,20 @@ class HybridSearchVectorStore:
         return results
     
     def _combine_and_rank_results(self,
-                              vector_results: List[Dict[str, Any]],
-                              bm25_results: List[Dict[str, Any]],
-                              top_k: int) -> List[Dict[str, Any]]:
+                                  vector_results: List[Dict[str, Any]],
+                                  bm25_results: List[Dict[str, Any]],
+                                  top_k: int) -> List[Dict[str, Any]]:
+        """
+        Combine vector and BM25 results, normalize scores, and rank by hybrid score.
+        
+        Args:
+            vector_results: Results from vector search
+            bm25_results: Results from BM25 search
+            top_k: Number of results to return
+            
+        Returns:
+            Combined and ranked results
+        """
         
         if vector_results:
             vector_scores = [r['vector_score'] for r in vector_results]
@@ -338,7 +426,8 @@ class HybridSearchVectorStore:
                 # Normalize: (score - min) / range
                 result['bm25_score_norm'] = (result['bm25_score'] - min_bm25) / bm25_range
         else:
-            bm25_scores = []  
+            bm25_scores = []
+            
             
             
             
@@ -379,14 +468,25 @@ class HybridSearchVectorStore:
         return final_results
         
     
-    def search(self, query_text:str,
-               Level: str,
-               top_k: int=5) -> List[Dict[str, Any]]: # type: ignore
-        if Level not in ['metadata', 'summary', 'meeting']:
-            raise ValueError(f"Invalid level: {Level}")
+    def search(self, query_text: str,
+               level: str,
+               top_k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Perform hybrid search (vector + BM25) on a specific level.
         
-        vector_results = self._vector_search(query_text, Level, top_k)
-        bm25_results = self._bm25_search(query_text, Level, top_k)
+        Args:
+            query_text: Query text
+            level: Level to search ('metadata', 'summary', 'meeting')
+            top_k: Number of results to return
+            
+        Returns:
+            List of search results with hybrid scores
+        """
+        if level not in ['metadata', 'summary', 'meeting']:
+            raise ValueError(f"Invalid level: {level}")
+        
+        vector_results = self._vector_search(query_text, level, top_k)
+        bm25_results = self._bm25_search(query_text, level, top_k)
         
         
         return self._combine_and_rank_results(vector_results, bm25_results, top_k)
@@ -397,7 +497,19 @@ class HybridSearchVectorStore:
                                      query_text: str,
                                      level: str,
                                      entry_ids: Set[str],
-                                     top_k: int=5) -> List[Dict[str, Any]]:
+                                     top_k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Search with entry ID filtering (for meeting level).
+        
+        Args:
+            query_text: Query text
+            level: Level to search (must be 'meeting')
+            entry_ids: Set of entry IDs to filter by
+            top_k: Number of results to return
+            
+        Returns:
+            List of search results with hybrid scores
+        """
         
         if level != 'meeting':
             raise ValueError(f"Entry ID filtering is only supported for 'meeting' level, got '{level}'")
@@ -412,7 +524,7 @@ class HybridSearchVectorStore:
             )
             
         if not relevant_indices:
-            print(f"Warning: no relevant id found for entry_ids: {entry_ids}")
+            print(f"Warning: no relevant ID found for entry_ids: {entry_ids}")
             return []
 
         print(f"  Filtered to {len(relevant_indices)} relevant FAISS indices from {len(entry_ids)} entry_ids")    
@@ -434,12 +546,12 @@ class HybridSearchVectorStore:
     
     
     def search_with_meeting_ids_filter(self,
-                                   query_text: str,
-                                   level: str,
-                                   meeting_ids: Optional[Set[str]] = None,
-                                   top_k: int = 5) -> List[Dict[str, Any]]:
+                                       query_text: str,
+                                       level: str,
+                                       meeting_ids: Optional[Set[str]] = None,
+                                       top_k: int = 5) -> List[Dict[str, Any]]:
         """
-        Search with optional meeting ID filtering
+        Search with optional meeting ID filtering.
         
         Args:
             query_text: Query text
@@ -490,200 +602,3 @@ class HybridSearchVectorStore:
         
         return self._combine_and_rank_results(vector_results, bm25_results, top_k)
             
-       
-    def search_multi_query(
-        self,
-        original_query: str,
-        query_rewrite: Dict[str, Any],
-        level: str,
-        top_k_vector: int = 5,
-        top_k_bm25: int = 20,
-        num_paraphrases: int = 2
-    ) -> List[Dict[str, Any]]:
-        """
-        Multi-query search with query rewriting:
-        1. Vector search: original_query + normalized_query + paraphrases (top_k_vector each)
-        2. BM25 search: people + keywords (top_k_bm25)
-        3. Merge by chunk_id, keep max vector score, combine with BM25 score
-        
-        Args:
-            original_query: Original user query
-            query_rewrite: Query rewrite result from QueryRewriter
-            level: Level to search ('metadata', 'summary', 'meeting')
-            top_k_vector: Top k for each vector query (default: 5)
-            top_k_bm25: Top k for BM25 keyword query (default: 20)
-            num_paraphrases: Number of paraphrases to use (default: 2)
-            
-        Returns:
-            List of results with score_vector and score_bm25, sorted by hybrid score
-        """
-        import random
-        
-        if level not in ['metadata', 'summary', 'meeting']:
-            raise ValueError(f"Invalid level: {level}")
-        
-        # ========== Step 1: Vector Multi-Query Search ==========
-        vector_queries = []
-        
-        # Add original query
-        vector_queries.append(original_query)
-        
-        # Add normalized query
-        normalized_query = query_rewrite.get('normalized_query', '')
-        if normalized_query:
-            vector_queries.append(normalized_query)
-        
-        # Add paraphrases (randomly select num_paraphrases)
-        paraphrases = query_rewrite.get('paraphrases', [])
-        if paraphrases:
-            selected_paraphrases = random.sample(
-                paraphrases, 
-                min(num_paraphrases, len(paraphrases))
-            )
-            vector_queries.extend(selected_paraphrases)
-        
-        print(f"  Vector multi-query: {len(vector_queries)} queries")
-        for i, q in enumerate(vector_queries, 1):
-            print(f"    {i}. {q[:80]}...")
-        
-        # Perform vector search for each query
-        all_vector_results = []
-        for query in vector_queries:
-            results = self._vector_search(query, level, top_k_vector)
-            all_vector_results.extend(results)
-        
-        # Merge vector results by chunk_id, keep max vector_score
-        vector_results_by_chunk: Dict[str, Dict[str, Any]] = {}
-        for result in all_vector_results:
-            chunk_id = result['chunk_id']
-            vector_score = result['vector_score']
-            
-            if chunk_id not in vector_results_by_chunk:
-                vector_results_by_chunk[chunk_id] = result.copy()
-            else:
-                # Keep the result with highest vector_score
-                if vector_score > vector_results_by_chunk[chunk_id]['vector_score']:
-                    vector_results_by_chunk[chunk_id] = result.copy()
-        
-        vector_candidates = list(vector_results_by_chunk.values())
-        print(f"  Vector search: {len(all_vector_results)} raw results -> {len(vector_candidates)} unique chunks")
-        
-        # ========== Step 2: BM25 Keyword Search ==========
-        # Build keyword query from people + keywords
-        entities = query_rewrite.get('entities', {})
-        people = entities.get('people', [])
-        keywords = entities.get('keywords', [])
-        
-        # Combine people and keywords
-        keyword_terms = people + keywords
-        keyword_query = ' '.join(keyword_terms)
-        
-        print(f"  BM25 keyword query: '{keyword_query}'")
-        
-        # Perform BM25 search
-        bm25_results = self._bm25_search(keyword_query, level, top_k_bm25)
-        print(f"  BM25 search: {len(bm25_results)} results")
-        
-        # ========== Step 3: Merge Results ==========
-        # Create a dictionary to merge by chunk_id
-        merged_results: Dict[str, Dict[str, Any]] = {}
-        
-        # Add vector results
-        for result in vector_candidates:
-            chunk_id = result['chunk_id']
-            merged_results[chunk_id] = {
-                'chunk_id': chunk_id,
-                'meeting_id': result.get('meeting_id'),
-                'level': level,
-                'text': result.get('text'),
-                'metadata': result.get('metadata'),
-                'score_vector': result['vector_score'],  # Raw vector score
-                'score_bm25': 0.0,  # Default, will be updated if found in BM25
-                'index': result.get('index')
-            }
-        
-        # Add/update with BM25 results
-        for result in bm25_results:
-            chunk_id = result['chunk_id']
-            bm25_score = result['bm25_score']
-            
-            if chunk_id in merged_results:
-                # Update existing result with BM25 score
-                merged_results[chunk_id]['score_bm25'] = bm25_score
-            else:
-                # Add new result from BM25 only
-                merged_results[chunk_id] = {
-                    'chunk_id': chunk_id,
-                    'meeting_id': result.get('meeting_id'),
-                    'level': level,
-                    'text': result.get('text'),
-                    'metadata': result.get('metadata'),
-                    'score_vector': 0.0,  # Default, not found in vector search
-                    'score_bm25': bm25_score,
-                    'index': result.get('index')
-                }
-        
-        # Normalize scores and calculate hybrid score
-        all_vector_scores = [r['score_vector'] for r in merged_results.values() if r['score_vector'] > 0]
-        all_bm25_scores = [r['score_bm25'] for r in merged_results.values() if r['score_bm25'] > 0]
-        
-        # Normalize vector scores
-        if all_vector_scores:
-            min_vec = min(all_vector_scores)
-            max_vec = max(all_vector_scores)
-            vec_range = max_vec - min_vec if max_vec != min_vec else 1.0
-        else:
-            vec_range = 1.0
-        
-        # Normalize BM25 scores
-        if all_bm25_scores:
-            min_bm25 = min(all_bm25_scores)
-            max_bm25 = max(all_bm25_scores)
-            bm25_range = max_bm25 - min_bm25 if max_bm25 != min_bm25 else 1.0
-        else:
-            bm25_range = 1.0
-        
-        # Calculate hybrid scores
-        final_results = []
-        for result in merged_results.values():
-            # Normalize scores
-            if result['score_vector'] > 0:
-                result['score_vector_norm'] = (result['score_vector'] - min_vec) / vec_range
-            else:
-                result['score_vector_norm'] = 0.0
-            
-            if result['score_bm25'] > 0:
-                result['score_bm25_norm'] = (result['score_bm25'] - min_bm25) / bm25_range
-            else:
-                result['score_bm25_norm'] = 0.0
-            
-            # Calculate hybrid score
-            result['hybrid_score'] = (
-                self.alpha * result['score_vector_norm'] + 
-                (1 - self.alpha) * result['score_bm25_norm']
-            )
-            result['score'] = result['hybrid_score']  # For compatibility
-        
-        # Sort by hybrid score
-        final_results = sorted(
-            merged_results.values(),
-            key=lambda x: x['hybrid_score'],
-            reverse=True
-        )
-        
-        print(f"  Merged results: {len(final_results)} total chunks")
-        print(f"    - Vector only: {sum(1 for r in final_results if r['score_bm25'] == 0)}")
-        print(f"    - BM25 only: {sum(1 for r in final_results if r['score_vector'] == 0)}")
-        print(f"    - Both: {sum(1 for r in final_results if r['score_vector'] > 0 and r['score_bm25'] > 0)}")
-        
-        return final_results
-            
-        
-            
-    
-    
-    
-    
-        
-        
-        

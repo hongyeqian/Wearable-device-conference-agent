@@ -2,44 +2,32 @@ import os
 import sys
 from pathlib import Path
 from typing import Optional, Set, Dict, Any, List
+from datetime import datetime
 
 
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
+
+from pydantic import Field
+from typing import Optional, Set
+
+from google.adk.agents import LlmAgent
+from google.adk.models import LiteLlm
+from google.adk.tools.function_tool import FunctionTool
+from google.adk.tools.agent_tool import AgentTool
+from google.adk.tools.tool_context import ToolContext
+
+from config.settings import DATA_DIR, VECTOR_STORE_DIR, CURRENT_USER
 
 from src.data_loader.loader import DataLoader
 from src.chunking.chunker import HierarchicalChunker
 from src.retrieval.vector_store_utils import VectorStoreUtilsMixin
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
 
-
-from google.adk.agents import LlmAgent
-from google.adk.models import LiteLlm
-from google.adk.tools.agent_tool import AgentTool
-
-from pydantic import Field
-
-from config.settings import DATA_DIR, VECTOR_STORE_DIR, CURRENT_USER
-
-
-
-from google.adk.agents import LlmAgent
-from google.adk.models import LiteLlm
-from google.adk.tools.function_tool import FunctionTool
-from typing import Dict, Any, List
-from google.adk.tools.tool_context import ToolContext
-from pydantic import BaseModel
-
 from sub_agents.planner_agent import planner_agent
-import sub_agents.query_rewriter_agent as q
 from sub_agents.query_rewriter_agent import rewrite_query_async, get_last_pandas_query_result
 from sub_agents.answer_agent import answer_synthesis_agent
-from datetime import datetime
 
-from typing import Any
-
-
-#MEETING_CATALOG = ""
 
 def format_context_for_answer(chunks: List[Dict[str, Any]], max_chunks: int = 15) -> str:
     """
@@ -79,36 +67,12 @@ if "SSL_CERT_FILE" in os.environ:
         print(f"Warning: Removed invalid SSL_CERT_FILE: {cert_path}")
 
 # return models for tool function
-class RewriteResult(BaseModel):
-    rewritten_query: str
-    paraphrases: List[str]
-    entities: Dict[str, Any]
-    structured_info: Dict[str, Any]
-
-class RetrieveResult(BaseModel):
-    chunks: List[Dict[str, Any]]
-    total_chunks: int
-
-class AnswerResult(BaseModel):
-    answer: str
-    chunks_used: List[Dict[str, Any]]
-    num_chunks: int
-
-class PlanResult(BaseModel):
-    need_rewrite: bool
-    need_rag: bool
-    answer_mode: str  # "rag" or "direct"
-    reason: str
-
-
 
 class FullRAGSystemAgent(LlmAgent):
     
     initialized: bool = Field(default=False)
-    meeting_catalog: str = Field(default="")
     retriever: Optional[HierarchicalRetriever] = Field(default=None)
     total_meetings: int = Field(default= 0)
-    summary_metadata_index: List[Dict[str, Any]] = Field(default_factory=list)
     all_meeting_ids: Set[str] = Field(default_factory=set)
     
     
@@ -126,9 +90,6 @@ class FullRAGSystemAgent(LlmAgent):
                 print("Warning: System not initialized in setup_state_func, performing emergency initialization...")
                 self._initialize_components()
                 tool_context.state["initialized"] = True
-                tool_context.state["meeting_catalog"] = self.meeting_catalog
-                # Also load summary metadata for filter agent
-                tool_context.state["summary_metadata_index"] = self.summary_metadata_index
 
             if not self.initialized:
                 raise RuntimeError("System initialization failed")
@@ -171,21 +132,6 @@ class FullRAGSystemAgent(LlmAgent):
                     meeting_ids=set(relevant_meeting_ids),
                     top_k=top_k * 2  # Get more results since we're filtering
                 )
-                
-                # # Also search with simple multi-query approach for better recall
-                # # Use the processed_query as the main query
-                # results_rewriter = self.retriever.search_with_rewriter(
-                #     original_query=processed_query,
-                #     query_rewrite={
-                #         "normalized_query": processed_query,
-                #         "paraphrases": [processed_query],  # Use processed query as paraphrase
-                #         "entities": {},  # No pre-extracted entities
-                #     },
-                #     level="summary",
-                #     top_k_vector=5,
-                #     top_k_bm25=20,
-                #     num_paraphrases=2,
-                # )
                 
                 # Merge results - keep unique chunks
                 results = results
@@ -237,12 +183,12 @@ class FullRAGSystemAgent(LlmAgent):
                 "message": "System already initialized"
             }
 
-        # initial for rag, this i will change later, becasue we cannot put the initial logic with the QnA logic together
+        # Initial setup for RAG - this will be refactored later
+        # as we cannot mix initialization logic with QnA logic
         self._initialize_components()
 
         # set our initial memory
         tool_context.state["initialized"] = True
-        tool_context.state["meeting_catalog"] = self.meeting_catalog
         tool_context.state["index_status"] = {
             "total_meetings": self.total_meetings,
             "vector_store_ready": self.retriever is not None
@@ -251,8 +197,6 @@ class FullRAGSystemAgent(LlmAgent):
         tool_context.state["current_user_name"] = CURRENT_USER
         tool_context.state["system_message"] = "✅ System initialized: meetings loaded, index ready."
         tool_context.state["retrieval_chunks"] = []
-        # Pass summary metadata index to session state for Filter Agent
-        tool_context.state["summary_metadata_index"] = self.summary_metadata_index
         return {
             "status": "state_initialized",
             "message": tool_context.state["system_message"]
@@ -446,20 +390,11 @@ State is managed automatically by the sub-agents via their output_keys.
         else:
             print("\n[Step 4] No new meetings to process ✓")
 
-        # Register all meetings with query rewriter (for MEETING_CATALOG)
-        print("\n[Step 5] Registering meetings with query rewriter...")
-        # set_meetings(all_meetings)
-        # self.meeting_catalog = q.MEETING_CATALOG
-        
-        # Load summary metadata for Filter Agent
-        print("\n[Step 5b] Loading summary metadata for Filter Agent...")
-        # self.summary_metadata_index = load_summary_metadata()
+        # Load meeting IDs for Filter Agent
+        print("\n[Step 5b] Registering meeting IDs...")
         self.all_meeting_ids = {m.meeting_id for m in all_meetings}
-        print(f"✓ Loaded {len(self.summary_metadata_index)} summary metadata entries")
+        print(f"✓ Registered {len(self.all_meeting_ids)} meeting IDs")
         
-        # print("DEBUG: loaded meetings count:", len(all_meetings))
-        # print(f"DEBUG: MEETING_CATALOG preview:\n{self.meeting_catalog[:500]}...")
-
         # Create retriever
         print("\n[Step 6] Creating hierarchical retriever...")
         if vector_store is None:

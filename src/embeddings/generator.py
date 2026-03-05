@@ -3,7 +3,7 @@ This module is embedding generator for the project
 Generates embeddings for different levels of chunks (metadata, summary, meeting)
 """
 
-from typing import List, Union, Dict, Any
+from typing import List, Dict
 import numpy as np
 from langchain_openai import OpenAIEmbeddings
 
@@ -41,47 +41,30 @@ class EmbeddingGenerator:
             model=self.model_name,
             **kwargs
         )
-        
-        # Cache for embeddings (optional, for development)
-        self._embedding_cache: Dict[str, np.ndarray] = {}
     
-    def generate_embedding(self, text: str, use_cache: bool = False) -> np.ndarray:
+    def generate_embedding(self, text: str) -> np.ndarray:
         """
         Generate embedding for a single text (for queries)
-        
+
         Args:
             text: Input text to embed
-            use_cache: Whether to use cached embeddings (default: False)
-            
+
         Returns:
             numpy array of embedding vector
         """
-        # Check cache if enabled
-        if use_cache and text in self._embedding_cache:
-            return self._embedding_cache[text]
-        
-        # Generate embedding
         embedding = self.embeddings.embed_query(text)
-        embedding_array = np.array(embedding)
-        
-        # Cache if enabled
-        if use_cache:
-            self._embedding_cache[text] = embedding_array
-        
-        return embedding_array
+        return np.array(embedding)
     
     def generate_embeddings_batch(self, 
                                   texts: List[str], 
-                                  batch_size: int = 100,
-                                  use_cache: bool = False) -> List[np.ndarray]:
+                                  batch_size: int = 100) -> List[np.ndarray]:
         """
         Generate embeddings for a batch of texts (for indexing)
-        
+
         Args:
             texts: List of input texts to embed
             batch_size: Batch size for embedding generation (default: 100)
-            use_cache: Whether to use cached embeddings (default: False)
-            
+
         Returns:
             List of numpy arrays of embedding vectors
         """
@@ -91,69 +74,34 @@ class EmbeddingGenerator:
         for i in range(0, len(texts), batch_size):
             batch_texts = texts[i:i + batch_size]
             
-            # Check cache for each text in batch
-            batch_embeddings = []
-            texts_to_embed = []
-            indices_to_embed = []
+            # Generate embeddings for batch
+            new_embeddings = self.embeddings.embed_documents(batch_texts)
             
-            for idx, text in enumerate(batch_texts):
-                if use_cache and text in self._embedding_cache:
-                    batch_embeddings.append((idx, self._embedding_cache[text]))
-                else:
-                    texts_to_embed.append(text)
-                    indices_to_embed.append(idx)
-            
-            # Generate embeddings for uncached texts
-            if texts_to_embed:
-                new_embeddings = self.embeddings.embed_documents(texts_to_embed)
-                
-                # Convert to numpy arrays and cache
-                for idx, embedding in zip(indices_to_embed, new_embeddings):
-                    embedding_array = np.array(embedding)
-                    if use_cache:
-                        self._embedding_cache[batch_texts[idx]] = embedding_array
-                    batch_embeddings.append((idx, embedding_array))
-            
-            # Sort by original index and extract embeddings
-            batch_embeddings.sort(key=lambda x: x[0])
-            all_embeddings.extend([emb for _, emb in batch_embeddings])
+            # Convert to numpy arrays
+            for embedding in new_embeddings:
+                all_embeddings.append(np.array(embedding))
         
         return all_embeddings
     
-    def generate_chunk_embedding(self, chunk: ChunkMetadata) -> np.ndarray:
-        """
-        Generate embedding for a single chunk
-        
-        Args:
-            chunk: ChunkMetadata object
-            
-        Returns:
-            numpy array of embedding vector
-        """
-        return self.generate_embedding(chunk.text)
-    
     def generate_chunks_embeddings(self, 
                                    chunks: List[ChunkMetadata],
-                                   batch_size: int = 100,
-                                   use_cache: bool = False) -> List[np.ndarray]:
+                                   batch_size: int = 100) -> List[np.ndarray]:
         """
         Generate embeddings for a list of chunks (for indexing)
-        
+
         Args:
             chunks: List of ChunkMetadata objects
             batch_size: Batch size for embedding generation (default: 100)
-            use_cache: Whether to use cached embeddings (default: False)
-            
+
         Returns:
             List of numpy arrays of embedding vectors
         """
         texts = [chunk.text for chunk in chunks]
-        return self.generate_embeddings_batch(texts, batch_size=batch_size, use_cache=use_cache)
+        return self.generate_embeddings_batch(texts, batch_size=batch_size)
     
     def generate_embeddings_by_level(self, 
                                      chunks_by_level: Dict[str, List[ChunkMetadata]],
-                                     batch_size: int = 100,
-                                     use_cache: bool = False) -> Dict[str, List[np.ndarray]]:
+                                     batch_size: int = 100) -> Dict[str, List[np.ndarray]]:
         """
         Generate embeddings for chunks organized by level
         
@@ -161,7 +109,6 @@ class EmbeddingGenerator:
             chunks_by_level: Dictionary with keys 'metadata', 'summary', 'meeting'
                             and values as lists of ChunkMetadata
             batch_size: Batch size for embedding generation (default: 100)
-            use_cache: Whether to use cached embeddings (default: False)
             
         Returns:
             Dictionary with same keys and values as lists of embedding vectors
@@ -174,7 +121,6 @@ class EmbeddingGenerator:
                 result[level] = self.generate_chunks_embeddings(
                     chunks, 
                     batch_size=batch_size,
-                    use_cache=use_cache
                 )
             else:
                 result[level] = []
@@ -207,14 +153,6 @@ class EmbeddingGenerator:
         # Default: generate a test embedding to get dimension
         test_embedding = self.generate_embedding("test")
         return len(test_embedding)
-    
-    def clear_cache(self):
-        """Clear the embedding cache"""
-        self._embedding_cache.clear()
-    
-    def get_cache_size(self) -> int:
-        """Get the number of cached embeddings"""
-        return len(self._embedding_cache)
 
 
 # Testing code
@@ -245,20 +183,27 @@ if __name__ == "__main__":
     test_chunk = all_chunks['metadata'][0] if all_chunks['metadata'] else None
     if test_chunk:
         print(f"\nTesting single embedding for chunk: {test_chunk.chunk_id}")
-        embedding = generator.generate_chunk_embedding(test_chunk)
+        embedding = generator.generate_embedding(test_chunk.text)
         print(f"Embedding shape: {embedding.shape}")
         print(f"Embedding dimension: {generator.get_embedding_dimension()}")
     
     # Test batch embeddings
     print(f"\nGenerating batch embeddings...")
-    embeddings_by_level = generator.generate_embeddings_by_level(all_chunks)
+    all_texts = []
+    all_chunks_list = []
+    for level, chunks in all_chunks.items():
+        all_texts.extend([chunk.text for chunk in chunks])
+        all_chunks_list.extend(chunks)
+    
+    embeddings = generator.generate_embeddings_batch(all_texts)
     
     # Print statistics
     print("\n" + "="*80)
     print("EMBEDDING GENERATION STATISTICS")
     print("="*80)
-    for level, embeddings in embeddings_by_level.items():
-        print(f"  {level.capitalize()} level: {len(embeddings)} embeddings")
-        if embeddings:
-            print(f"    - Embedding dimension: {embeddings[0].shape[0]}")
+    for level, chunks in all_chunks.items():
+        level_embeddings = [emb for emb, chunk in zip(embeddings, all_chunks_list) if chunk.level == level]
+        print(f"  {level.capitalize()} level: {len(level_embeddings)} embeddings")
+        if level_embeddings:
+            print(f"    - Embedding dimension: {level_embeddings[0].shape[0]}")
     print("="*80)

@@ -157,7 +157,9 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
         metadata = {
             'alpha': self.alpha,
             'embedding_dim': self.embedding_dim,
-            'embedding_model': EMBEDDING_MODEL
+            'embedding_model': EMBEDDING_MODEL,
+            'faiss_nlist': self.faiss_nlist,
+            'faiss_nprobe': self.faiss_nprobe
         }
         with open(metadata_file, 'wb') as f:
             pickle.dump(metadata, f)
@@ -208,6 +210,15 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
                 f"loaded={metadata['embedding_dim']}, "
                 f"current={instance.embedding_dim}"
             )
+        
+        # Load faiss_nlist and faiss_nprobe from metadata
+        if 'faiss_nlist' in metadata:
+            instance.faiss_nlist = metadata['faiss_nlist']
+            print(f"  ✅ Loaded faiss_nlist: {instance.faiss_nlist}")
+        
+        if 'faiss_nprobe' in metadata:
+            instance.faiss_nprobe = metadata['faiss_nprobe']
+            print(f"  ✅ Loaded faiss_nprobe: {instance.faiss_nprobe}")
         
         # Load FAISS indices
         faiss_dir = save_dir / "faiss"
