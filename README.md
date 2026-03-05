@@ -64,6 +64,8 @@ DevelopmentRAG/
 # Create virtual environment
 python -m venv .venv
 
+# cd to the Astar_RAG_System
+cd Astar_RAG_System (tab)
 # Activate virtual environment
 ./.venv/Scripts/Activate.ps1    // conda environment cannot link openai use venv!!!
 
