@@ -70,6 +70,7 @@ python -m venv .venv
 # Install dependencies
 pip install -r requirements.txt
 
+
 # Download spaCy language model (for Presidio privacy processing)
 python -m spacy download en_core_web_sm
 ```
