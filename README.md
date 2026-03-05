@@ -70,13 +70,14 @@ python -m venv .venv
 # Install dependencies
 pip install -r requirements.txt
 
-# Download spaCy language model (for Presidio privacy processing)
+# Download spaCy language model (for Presidio privacy processing)， both need to download, if you do not want to download the large one, go to query_rewriter_agent.py change the  AnalyzerEngine()
 python -m spacy download en_core_web_sm
+python -m spacy download en_core_web_lg
 ```
 
 #### 1.2 Configure Environment Variables
 
-Create a `.env` file in the `config/` directory:
+Create a `.env` file in the `config/` directory, do not forgot to build this, if do not build, system cannot run.
 
 ```bash
 # OpenAI API configuration (required)
