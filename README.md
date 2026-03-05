@@ -65,11 +65,10 @@ DevelopmentRAG/
 python -m venv .venv
 
 # Activate virtual environment
-.venv\Scripts\activate
+./.venv/Scripts/Activate.ps1    // conda environment cannot link openai use venv!!!
 
 # Install dependencies
 pip install -r requirements.txt
-
 
 # Download spaCy language model (for Presidio privacy processing)
 python -m spacy download en_core_web_sm
@@ -165,19 +164,18 @@ User's Original Query
     │       Detects whether names, dates, etc. in the query are explicit
     │       Example: "that meeting" → needs to determine which specific meeting
     │
-    ├─► Stage 2: Pandas Query (pandas_query)
-    │       Retrieves candidate meetings from meeting catalog
-    │       Example: Find meetings containing specific person
+    ├─► Stage 2: Replace ambiguity into true information
+    │       do simple replacement
+    │       Example: hongye -> hongye qian
     │
-    └─► Stage 3: Placeholder Resolution (resolve_placeholders)
-            Resolves ambiguous references to specific entities
-            Example: "last month" → "2024-01"
+    └─► Stage 3: react llm to search pandas
+            Resolves meeting ambiguous information to specific entities
+            Example: "last three meetings" → "2025-11.30", "2025-11.29", "2025-11.21"
 ```
 
 **Core Functions**:
 - `check_ambiguity()`: Detect query ambiguity
 - `pandas_query()`: Generate Pandas query to get candidate meetings
-- `resolve_placeholders()`: Resolve time, person name, and other placeholders
 - `rewrite_query_async()`: Execute complete rewriting process asynchronously
 
 ### 5. Answer Agent (`sub_agents/answer_agent.py`)
@@ -203,10 +201,6 @@ EMBEDDING_MODEL=text-embedding-3-small
 # ELASTICSEARCH_USERNAME=elastic
 # ELASTICSEARCH_PASSWORD=your_password
 # ELASTICSEARCH_INDEX_PREFIX=meeting_rag
-
-# ========== Application Configuration ==========
-APP_NAME=agents
-DATA_DIR=datademo
 ```
 
 ### Core Configuration Items (`config/settings.py`)
@@ -220,52 +214,7 @@ DATA_DIR=datademo
 | `TOP_K_MEETING` | 3 | Number of meeting retrievals |
 | `TOP_K_CHUNK` | 5 | Number of content chunk retrievals |
 
-## Troubleshooting
 
-### Q1: "OPENAI_API_KEY not found" on startup
-
-**Solution**:
-1. Ensure `config/.env` file exists and contains the correct API key
-2. Verify the API key has not expired or been revoked
-3. Check if environment variables are loaded correctly
-
-### Q2: Empty vector retrieval results
-
-**Possible causes**:
-1. Vector index not generated yet → Run embedding generation script
-2. Query content not related to indexed data → Check data directory
-3. Incorrect Embedding model configuration → Verify `EMBEDDING_MODEL` setting
-
-### Q3: Query rewriting results not as expected
-
-**Suggestions**:
-1. Check if data in `datademo/` is complete
-2. Verify if meeting catalog in `pandas_utils.py` is generated correctly
-3. Check specific error messages in logs
-
-### Q4: spaCy model download fails
-
-**Solution**:
-```bash
-# Manual download
-python -m spacy download en_core_web_sm
-
-# Or use Chinese mirror
-pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
-```
-
-### Q5: FAISS index fails to load
-
-**Possible causes**:
-1. Index file corrupted → Regenerate index
-2. Path configuration error → Check `VECTOR_STORE_DIR` setting
-
-### Q6: Elasticsearch connection fails
-
-**Check items**:
-1. Is Elasticsearch service running?
-2. Are URL, username, and password correct?
-3. Can network access Elasticsearch port (default 9200)?
 
 ## Future Improvements
 
@@ -273,7 +222,6 @@ pip install https://github.com/explosion/spacy-models/releases/download/en_core_
 2. **Evaluation Framework**: Integrate RAGAs and other evaluation tools
 3. **Multi-modal Support**: Support audio and video meeting recordings
 4. **Enterprise Deployment**: Add authentication, rate limiting, and other production features
+5. conside to use mapping knowledge domain
 
-## License
-
-MIT License
+## LicenseMIT License
