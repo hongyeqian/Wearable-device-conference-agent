@@ -1,21 +1,38 @@
+"""
+Planner Agent - Decides whether to use query rewrite and RAG
+"""
+from pydantic import BaseModel, Field
+from typing import List, Literal
 from google.adk.agents import LlmAgent
 from google.adk.models import LiteLlm
-from pydantic import BaseModel, Field
-from typing import Literal
-import os
+from config.settings import OPENAI_API_KEY, OPENAI_MODEL
+
 
 class Plan(BaseModel):
-    need_rewrite: bool = Field(description="True if the query is ambiguous or needs clarification")
-    need_rag: bool = Field(description="True if the query needs documents/meetings knowledge")
-    answer_mode: Literal["rag", "direct"] = Field(description="Either 'rag' or 'direct'")
-    reason: str = Field(description="Short reason for the decision")
+    """Output schema for planner agent"""
+    need_rewrite: bool = Field(
+        description="Whether the query needs rewriting to resolve ambiguities (pronouns, time references, etc.)"
+    )
+    need_rag: bool = Field(
+        description="Whether the query requires RAG retrieval to answer from knowledge base"
+    )
+    reason: str = Field(
+        description="Brief explanation for the decisions made"
+    )
 
-class PlannerAgent(LlmAgent):
-    def __init__(self):
-        super().__init__(
-            name="PlannerAgent",
-            model=LiteLlm(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY")),
-            instruction="""You are a query planner that analyzes user questions and creates execution plans.
+
+# Create planner LLM model
+planner_llm = LiteLlm(
+    model=OPENAI_MODEL or "gpt-4o-mini",
+    api_key=OPENAI_API_KEY,
+)
+
+
+# Planner agent - decides if query needs rewrite and/or rag
+planner_agent = LlmAgent(
+    name="PlannerAgent",
+    model=planner_llm,
+    instruction="""You are a query planner that analyzes {user_query} and creates execution plans.
             
             System has been initialized. You may safely use meeting_catalog and index_status from state.
 
@@ -33,11 +50,11 @@ HARD RULES FOR need_rewrite=True:
 - Query contains first-person pronouns (I/we/my/our/us) → need_rewrite=True
 - Query contains relative time expressions (last N meetings/last week/yesterday/recent/past N days) → need_rewrite=True  
 - Query needs time range inference from meeting_catalog → need_rewrite=True
+- If there is a name in user query, and you are not sure it is the full name.
 
 Return ONLY valid JSON that matches the schema.""",
-            output_schema=Plan,  # Pydantic model class
-            output_key="plan",
-            include_contents= "none"
-        )
-
-planner_agent = PlannerAgent()
+    description="Decides whether to use query rewrite and RAG retrieval",
+    output_schema=Plan,
+    output_key="plan",
+    include_contents="none"
+)
