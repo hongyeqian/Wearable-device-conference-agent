@@ -341,19 +341,19 @@ def check_ambiguity(query: str) -> str:
 
 def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict[str, Any]:
     """
-    阶段二：Resolution - 直接替换（方案A）
+    Stage 2: Resolution - Direct replacement (Option A)
     
-    1. 第一人称 → 替换为 CURRENT_USER
-    2. 绝对时间 → 用 dateparser 解析为具体日期
-    3. 人名 → 使用 person_mapping 进行替换
-    4. "last meeting" 等模糊时间 → 原样传给阶段三，不处理
+    1. First-person pronouns → Replace with CURRENT_USER
+    2. Absolute time expressions → Parse to specific dates using dateparser
+    3. Person names → Replace using person_mapping
+    4. "last meeting" type ambiguous times → Pass through to Stage 3 as-is
     
     Args:
-        original_query: 原始查询
-        stage1_result: 阶段一检测结果
+        original_query: Original user query
+        stage1_result: Detection result from Stage 1
     
     Returns:
-        包含 resolved_query 和 replacement_log 的字典
+        Dictionary containing resolved_query and replacement_log
     """
     query = original_query
     person_terms = stage1_result.get('person_terms', [])
@@ -379,7 +379,7 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
             replacement_log.append((term, date_str))
             query = query.replace(term, date_str)
     
-    # 3. Person names -> 使用 person_mapping 替换原始人名为解析后人名
+    # 3. Person names -> Replace original person names with resolved names using person_mapping
     # person_mapping: {original_name: resolved_name}, e.g., {"Hongye": "Hongye Qian"}
     for original_name, resolved_name in person_mapping.items():
         if original_name != resolved_name:  # Only replace if different
