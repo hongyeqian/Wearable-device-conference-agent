@@ -147,7 +147,7 @@ class PersonMatcher:
         # Step 2: Use TheFuzz to find fuzzy matches in text against participants
         # This handles partial names like "Hongye" -> "Hongye Qian"
         # Only match if the text length is reasonable (avoid false positives like "weather")
-        detected_by_fuzz = []
+        detected_by_fuzz = []  # Store original matched text (e.g., "Hongye")
         text_lower = text.lower()
         for participant in participants:
             # Skip generic/placeholder names
@@ -164,7 +164,7 @@ class PersonMatcher:
                 # Use token_set_ratio for better matching
                 match_score = fuzz.token_set_ratio(part.lower(), text_lower)
                 if match_score >= 80:  # Higher threshold for detection
-                    detected_by_fuzz.append(participant)
+                    detected_by_fuzz.append(part)  # Store original matched part (e.g., "Hongye")
                     break
         
         # Combine results (union)
@@ -173,7 +173,7 @@ class PersonMatcher:
         # Step 3: Resolve to canonical names using TheFuzz
         resolved = []
         for person in all_detected:
-            match = self.find_match(person, participants)
+            match = self.find_match(person, participants)  # e.g., "Hongye" -> "Hongye Qian"
             if match:
                 resolved.append(match)
         

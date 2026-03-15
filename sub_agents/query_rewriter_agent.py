@@ -1,7 +1,8 @@
 """
 Query Rewrite Agent - Single Agent Architecture
-Uses ReAct/COT loop for query rewriting to resolve person/time ambiguities
+Uses three-layer Stage 3: Regex → spaCy Matcher → LLM fallback (single tool call)
 """
+import logging
 import sys
 import json
 import re
@@ -12,6 +13,10 @@ from google.adk.agents import LlmAgent
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.models import LiteLlm
 from config.settings import OPENAI_API_KEY, CURRENT_USER, DATA_DIR
+from config.meeting_patterns import MEETING_AMBIGUITY_PATTERNS, EMBEDDING_THRESHOLD
+
+# Configure logging for query rewriter
+logger = logging.getLogger(__name__)
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -19,10 +24,96 @@ sys.path.insert(0, str(project_root))
 
 # Import utilities
 import dateparser
+import numpy as np
 from sub_agents.pandas_utils import get_meetings_df
 
 from sub_agents.date_resolver import DateResolver
 from sub_agents.person_matcher import PersonMatcher
+
+
+# ============ Embedding Generator for Meeting Patterns ============
+
+_embedding_generator = None
+
+def get_embedding_generator():
+    """Lazy initialize embedding generator for meeting patterns."""
+    global _embedding_generator
+    if _embedding_generator is not None:
+        return _embedding_generator
+    
+    from src.embeddings.generator import EmbeddingGenerator
+    _embedding_generator = EmbeddingGenerator()
+    return _embedding_generator
+
+
+# ============ Stage 3 Layer 2: Embedding Threshold Detection ============
+
+_pattern_embeddings = None
+
+def _get_pattern_embeddings():
+    """
+    Pre-compute embeddings for all meeting ambiguity patterns.
+    Uses lazy initialization.
+    """
+    global _pattern_embeddings
+    if _pattern_embeddings is not None:
+        return _pattern_embeddings
+    
+    generator = get_embedding_generator()
+    embeddings = generator.generate_embeddings_batch(MEETING_AMBIGUITY_PATTERNS)
+    _pattern_embeddings = np.array([emb.tolist() for emb in embeddings]).astype('float32')
+    
+    # Normalize for cosine similarity
+    norms = np.linalg.norm(_pattern_embeddings, axis=1, keepdims=True)
+    _pattern_embeddings = _pattern_embeddings / norms
+    
+    return _pattern_embeddings
+
+
+def check_embedding_threshold(query: str, threshold: float = EMBEDDING_THRESHOLD) -> tuple[bool, List[str]]:
+    """
+    Stage 3 - Layer 2: Embedding threshold detection
+    
+    - Uses embedding model to convert query to vector
+    - Computes cosine similarity with preset meeting pattern library
+    - If max similarity >= threshold: regex didn't fully resolve meeting ambiguity, returns matched patterns
+    - If max similarity < threshold: no meeting ambiguity issue, returns empty list
+    
+    Args:
+        query: Resolved query from Stage 2
+        threshold: Similarity threshold (default from settings)
+    
+    Returns:
+        (needs_further_processing, matched_patterns)
+    """
+    generator = get_embedding_generator()
+    pattern_embeddings = _get_pattern_embeddings()
+    
+    # Generate embedding for query
+    query_embedding = generator.generate_embedding(query)
+    query_vector = np.array([query_embedding.tolist()]).astype('float32')
+    
+    # Normalize for cosine similarity
+    query_norm = np.linalg.norm(query_vector)
+    if query_norm > 0:
+        query_vector = query_vector / query_norm
+    
+    # Compute cosine similarities
+    similarities = np.dot(query_vector, pattern_embeddings.T)[0]
+    
+    # Find max similarity
+    max_idx = np.argmax(similarities)
+    max_similarity = similarities[max_idx]
+    
+    logger.info(f"[Stage3-Layer2-Embedding] Max similarity: {max_similarity:.3f} with pattern: '{MEETING_AMBIGUITY_PATTERNS[max_idx]}'")
+    
+    if max_similarity >= threshold:
+        matched_pattern = MEETING_AMBIGUITY_PATTERNS[max_idx]
+        logger.info(f"[Stage3-Layer2-Embedding] Threshold met, pattern matched: '{matched_pattern}'")
+        return (True, [matched_pattern])
+    
+    logger.info(f"[Stage3-Layer2-Embedding] Threshold not met, no ambiguity detected")
+    return (False, [])
 
 
 # ============ Pydantic Models ============
@@ -282,37 +373,14 @@ def check_ambiguity(query: str) -> str:
     matcher = PersonMatcher(threshold=0.6)
     person_detection_result = matcher.detect_and_resolve(query)
     
-    # Get resolved person names
-    resolved_persons = person_detection_result.get("resolved", [])  # Resolved full names
+    # Get detected and resolved person names
+    detected_persons = person_detection_result.get("detected", [])  # Original detected names
+    resolved_persons = person_detection_result.get("resolved", [])  # Resolved canonical names
     
-    # Get participants for fuzzy matching
-    participants = person_detection_result.get("participants", [])
-    
-    # Create mapping: original text in query -> resolved name
-    # Since PersonMatcher doesn't return original text, we need to find it manually
-    # by matching resolved names back against the query using TheFuzz
-    from thefuzz import fuzz
-    
+    # Build person_mapping directly from detected and resolved
     person_mapping = {}
-    query_lower = query.lower()
-    
-    for resolved in resolved_persons:
-        # Try to find what text in the query matched this resolved name
-        # Check if the resolved name or any part of it appears in the query
-        parts = resolved.split()
-        for part in parts:
-            if len(part) < 3:  # Skip short parts
-                continue
-            # Check if this part appears in the query
-            if part.lower() in query_lower:
-                # Found a match - use the original text from query
-                # Find the actual case from query
-                import re
-                match = re.search(re.escape(part), query, re.IGNORECASE)
-                if match:
-                    original_text = match.group()
-                    person_mapping[original_text] = resolved
-                    break
+    for detected, resolved in zip(detected_persons, resolved_persons):
+        person_mapping[detected] = resolved
     
     # Get resolved person names
     found_person = resolved_persons
@@ -353,7 +421,7 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
         stage1_result: Detection result from Stage 1
     
     Returns:
-        Dictionary containing resolved_query and replacement_log
+        Dictionary containing resolved_query, replacement_log, resolved_persons, resolved_times
     """
     query = original_query
     person_terms = stage1_result.get('person_terms', [])
@@ -361,13 +429,16 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
     time_terms = stage1_result.get('time_terms', [])  # Only spaCy-detected absolute times
     
     replacement_log = []
+    resolved_persons = []  # Track resolved person names for merge
+    resolved_times = []    # Track resolved time strings for merge
     
-    # 1. Handle pronouns -> CURRENT_USER (use word boundary regex)
+    # 1. Handle pronouns -> Replace with actual user name (use word boundary regex)
     first_person = {'i', 'me', 'my', 'mine', 'we', 'us', 'our', 'ours'}
     for term in person_terms:
         term_lower = term.lower()
         if term_lower in first_person:
             replacement_log.append((term, CURRENT_USER))
+            resolved_persons.append(CURRENT_USER)  # Already resolved to "Hongye Qian" from settings
             # Use word boundary to avoid replacing substrings
             query = re.sub(r'\b' + re.escape(term) + r'\b', CURRENT_USER, query, flags=re.IGNORECASE)
     
@@ -377,6 +448,7 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
         if parsed:
             date_str = parsed.strftime("%Y-%m-%d")
             replacement_log.append((term, date_str))
+            resolved_times.append(date_str)
             query = query.replace(term, date_str)
     
     # 3. Person names -> Replace original person names with resolved names using person_mapping
@@ -384,6 +456,7 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
     for original_name, resolved_name in person_mapping.items():
         if original_name != resolved_name:  # Only replace if different
             replacement_log.append((original_name, resolved_name))
+            resolved_persons.append(resolved_name)
             query = re.sub(r'\b' + re.escape(original_name) + r'\b', resolved_name, query, flags=re.IGNORECASE)
     
     # 4. "last meeting" is NOT handled here - passes through to Stage 3
@@ -391,8 +464,188 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
     
     return {
         'resolved_query': query,
-        'replacement_log': replacement_log
+        'replacement_log': replacement_log,
+        'resolved_persons': resolved_persons,
+        'resolved_times': resolved_times
     }
+
+
+# ============ Stage 3 Layer 1: Regex Matching ============
+
+# Regex patterns for standard meeting-time expressions
+_MEETING_REGEX_PATTERNS = [
+    # "last 3 meetings", "last three meetings"
+    (r'\b(?:the\s+)?last\s+(\d+)\s+meetings?\b', lambda m: int(m.group(1))),
+    (r'\b(?:the\s+)?last\s+meeting\b', lambda m: 1),
+    # "recent 5 meetings", "recent meetings"
+    (r'\b(?:the\s+)?recent\s+(\d+)\s+meetings?\b', lambda m: int(m.group(1))),
+    (r'\b(?:the\s+)?recent\s+meetings?\b', lambda m: 3),
+    # "previous 2 meetings", "previous meeting"
+    (r'\b(?:the\s+)?previous\s+(\d+)\s+meetings?\b', lambda m: int(m.group(1))),
+    (r'\b(?:the\s+)?previous\s+meeting\b', lambda m: 1),
+    # "past 3 meetings", "past meetings"
+    (r'\b(?:the\s+)?past\s+(\d+)\s+meetings?\b', lambda m: int(m.group(1))),
+    (r'\b(?:the\s+)?past\s+meetings?\b', lambda m: 3),
+]
+
+
+def resolve_by_regex(query: str, person_name: Optional[str] = None) -> Optional[RewriteOutput]:
+    """
+    Stage 3 - Layer 1: Regex-based resolution for standard meeting-time patterns.
+    Directly calls pandas if a pattern matches, no LLM needed.
+    
+    Args:
+        query: Resolved query from Stage 2
+        person_name: Optional person name for filtering (from Stage 1)
+    
+    Returns:
+        RewriteOutput if matched, None if no regex match
+    """
+    for pattern, n_extractor in _MEETING_REGEX_PATTERNS:
+        match = re.search(pattern, query, re.IGNORECASE)
+        if match:
+            n = n_extractor(match)
+            logger.info(f"[Stage3-Layer1-Regex] Matched pattern: '{match.group()}' → n={n}, person={person_name}")
+            
+            # Directly call pandas - no LLM needed
+            mdf = get_meetings_df()
+            meetings = mdf.get_last_n_meetings(n=n, person_name=person_name)
+            meeting_ids = [m["meeting_id"] for m in meetings]
+            dates = [m["date"] for m in meetings]
+            
+            # Replace the matched pattern with actual dates
+            date_str = ", ".join(dates)
+            rewritten = re.sub(pattern, f"meetings on {date_str}", query, flags=re.IGNORECASE)
+            
+            logger.info(f"[Stage3-Layer1-Regex] Rewritten: '{rewritten}', meeting_ids: {meeting_ids}")
+            return RewriteOutput(
+                rewritten_query=rewritten,
+                relevant_meeting_ids=meeting_ids
+            )
+    
+    return None  # No regex match
+
+
+# ============ Stage 3 Layer 3: Embedding Resolution ============
+
+# Word to number mapping for extraction
+_WORD_TO_NUM = {
+    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+    'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+    'a': 1, 'an': 1,
+}
+
+
+def _extract_number_from_query(query: str) -> Optional[int]:
+    """
+    Extract numeric value from query (digits or words).
+    
+    Args:
+        query: The query string to extract number from
+        
+    Returns:
+        Extracted number as int, or None if not found
+    """
+    # Try digit first
+    digit_match = re.search(r'\b(\d+)\b', query)
+    if digit_match:
+        return int(digit_match.group(1))
+    
+    # Try word matching
+    query_lower = query.lower()
+    for word, num in _WORD_TO_NUM.items():
+        if re.search(rf'\b{word}\b', query_lower):
+            return num
+    
+    return None
+
+
+def _find_best_pattern_match(query: str) -> tuple[Optional[str], float]:
+    """
+    Find the best matching meeting ambiguity pattern using embedding similarity.
+    
+    Args:
+        query: The query to match against patterns
+        
+    Returns:
+        (best_pattern, similarity_score) or (None, 0) if below threshold
+    """
+    generator = get_embedding_generator()
+    pattern_embeddings = _get_pattern_embeddings()
+    
+    # Generate embedding for query
+    query_embedding = generator.generate_embedding(query)
+    query_vector = np.array([query_embedding.tolist()]).astype('float32')
+    
+    # Normalize
+    query_norm = np.linalg.norm(query_vector)
+    if query_norm > 0:
+        query_vector = query_vector / query_norm
+    
+    # Compute similarities
+    similarities = np.dot(query_vector, pattern_embeddings.T)[0]
+    
+    # Find best match
+    best_idx = np.argmax(similarities)
+    best_score = similarities[best_idx]
+    best_pattern = MEETING_AMBIGUITY_PATTERNS[best_idx] if best_score >= EMBEDDING_THRESHOLD else None
+    
+    return best_pattern, float(best_score)
+
+
+def resolve_by_embedding(query: str, person_name: Optional[str] = None) -> Optional[RewriteOutput]:
+    """
+    Stage 3 - Layer 3: Embedding-based resolution for ambiguous meeting patterns.
+    
+    This is called when regex didn't fully resolve the meeting ambiguity (threshold >= 0.8).
+    Extracts number from query, matches with MEETING_AMBIGUITY_PATTERNS using embeddings,
+    then calls pandas to resolve to specific meeting dates.
+    
+    Args:
+        query: The rewritten query after Stage 1/2 (may still have meeting ambiguity)
+        person_name: Optional person name for filtering
+        
+    Returns:
+        RewriteOutput with resolved query and meeting IDs, or None if failed
+    """
+    # Step 1: Extract number from query
+    extracted_num = _extract_number_from_query(query)
+    n = extracted_num if extracted_num is not None else 3  # Default to 3 if no number found
+    
+    # Step 2: Find best matching pattern
+    best_pattern, similarity = _find_best_pattern_match(query)
+    
+    if not best_pattern:
+        logger.warning(f"[Stage3-Layer3-Embedding] No pattern matched above threshold, skipping")
+        return None
+    
+    logger.info(f"[Stage3-Layer3-Embedding] Matched pattern: '{best_pattern}' (similarity={similarity:.3f}), n={n}")
+    
+    # Step 3: Call pandas to get meetings
+    mdf = get_meetings_df()
+    meetings = mdf.get_last_n_meetings(n=n, person_name=person_name)
+    
+    if not meetings:
+        logger.warning(f"[Stage3-Layer3-Embedding] No meetings found for n={n}, person={person_name}")
+        return None
+    
+    meeting_ids = [m["meeting_id"] for m in meetings]
+    dates = [m["date"] for m in meetings]
+    
+    # Step 4: Replace the ambiguous pattern with actual dates
+    date_str = ", ".join(dates)
+    rewritten = re.sub(best_pattern, f"meetings on {date_str}", query, flags=re.IGNORECASE)
+    
+    # If no replacement happened, just append the date info
+    if rewritten == query:
+        rewritten = f"{query} (meetings on {date_str})"
+    
+    logger.info(f"[Stage3-Layer3-Embedding] Rewritten: '{rewritten}', meeting_ids: {meeting_ids}")
+    
+    return RewriteOutput(
+        rewritten_query=rewritten,
+        relevant_meeting_ids=meeting_ids
+    )
 
 
 # ============ Create Tools ============
@@ -406,41 +659,44 @@ reset_counter_tool = FunctionTool(func=reset_counter)
 
 # ============ Main Entry Point: Three-Stage Pipeline ============
 
-import asyncio
-
-# ADK imports for Stage 3
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-from google.genai import types
-
-
-def rewrite_query(query: str) -> RewriteOutput:
+def merge_all_meeting_ids(
+    stage2_result: Dict[str, Any],
+    stage3_meeting_ids: List[str]
+) -> List[str]:
     """
-    Three-stage Query Rewriter Pipeline (Synchronous Entry)
-    
-    This is the main entry point that orchestrates all three stages:
-    - Stage 1: Detection (synchronous Python function)
-    - Stage 2: Resolution (synchronous Python function)
-    - Stage 3: LLM ReAct (asynchronous, wrapped with asyncio.run)
+    Final unified processing: collect resolved persons/times from Stage 2,
+    make pandas queries, and merge with Stage 3 meeting_ids
     
     Args:
-        query: Original user query
-        
+        stage2_result: Stage 2 resolution result (resolved_persons, resolved_times)
+        stage3_meeting_ids: Meeting IDs from Stage 3
+    
     Returns:
-        RewriteOutput with rewritten_query and relevant_meeting_ids
+        Merged list of meeting IDs
     """
-    # ===== Stage 1: Detection (Synchronous) =====
-    stage1_result_json = check_ambiguity(query)
-    stage1_result = json.loads(stage1_result_json)
+    from sub_agents.pandas_utils import get_meetings_df
     
-    # ===== Stage 2: Resolution (Synchronous) =====
-    stage2_result = resolve_entities(query, stage1_result)
-    resolved_query = stage2_result['resolved_query']
+    all_meeting_ids = set(stage3_meeting_ids)
+    mdf = get_meetings_df()
     
-    # ===== Stage 3: LLM ReAct (Asynchronous, wrapped with asyncio.run) =====
-    stage3_result = asyncio.run(_run_stage3_async(resolved_query))
+    # 1. Query by resolved person names
+    resolved_persons = stage2_result.get('resolved_persons', [])
+    for person in resolved_persons:
+        df = mdf.filter_by_person(person)
+        person_meeting_ids = df["meeting_id"].tolist()
+        all_meeting_ids.update(person_meeting_ids)
+        logger.info(f"[Merge] Added {len(person_meeting_ids)} meetings for person: {person}")
     
-    return stage3_result
+    # 2. Query by resolved time strings
+    resolved_times = stage2_result.get('resolved_times', [])
+    for date_str in resolved_times:
+        df_filtered = mdf.filter_by_date_range(start_date=date_str, end_date=date_str)
+        time_meeting_ids = df_filtered["meeting_id"].tolist()
+        all_meeting_ids.update(time_meeting_ids)
+        logger.info(f"[Merge] Added {len(time_meeting_ids)} meetings for time: {date_str}")
+    
+    logger.info(f"[Merge] Final meeting IDs count: {len(all_meeting_ids)}")
+    return list(all_meeting_ids)
 
 
 async def rewrite_query_async(query: str) -> RewriteOutput:
@@ -450,232 +706,65 @@ async def rewrite_query_async(query: str) -> RewriteOutput:
     This is the async entry point for use in async environments like ADK.
     It avoids the "asyncio.run() cannot be called from a running event loop" error.
     
+    Note: No LLM fallback - embedding threshold determines if query is clean
+    
     Args:
         query: Original user query
         
     Returns:
         RewriteOutput with rewritten_query and relevant_meeting_ids
     """
+    logger.info(f"[QueryRewriter] Input query: '{query}'")
+    
     # ===== Stage 1: Detection (Synchronous) =====
     stage1_result_json = check_ambiguity(query)
     stage1_result = json.loads(stage1_result_json)
+    logger.info(f"[Stage1-Detection] time={stage1_result.get('time_terms')}, person={stage1_result.get('person_terms')}")
     
     # ===== Stage 2: Resolution (Synchronous) =====
     stage2_result = resolve_entities(query, stage1_result)
     resolved_query = stage2_result['resolved_query']
+    logger.info(f"[Stage2-Resolution] Resolved: '{resolved_query}', log={stage2_result.get('replacement_log')}")
     
-    # ===== Stage 3: LLM ReAct (Asynchronous, await directly) =====
-    stage3_result = await _run_stage3_async(resolved_query)
+    # Extract person name for Stage 3 (from resolved persons in Stage 2)
+    resolved_persons = stage2_result.get('resolved_persons', [])
+    person_name = resolved_persons[0] if resolved_persons else None
     
-    return stage3_result
-
-
-async def _run_stage3_async(query: str) -> RewriteOutput:
-    """
-    Stage 3: LLM ReAct for handling ambiguous meeting time expressions
+    # ===== Stage 3: Pipeline resolution (Regex → Embedding threshold check → Embedding if needed) =====
+    # Layer 1: Regex - Try to resolve specific meeting patterns
+    regex_result = resolve_by_regex(resolved_query, person_name)
     
-    This async function creates and runs the LLM Agent to handle
-    "last meeting", "recent meeting" type ambiguities by calling pandas_query.
+    # Use regex result if available, otherwise use resolved_query
+    base_query = regex_result.rewritten_query if regex_result else resolved_query
     
-    Args:
-        query: Query after Stage 2 processing (first-person and absolute times resolved)
+    # Layer 2: Check embedding threshold on the base query
+    needs_embedding, matched_patterns = check_embedding_threshold(base_query)
+    
+    if needs_embedding:
+        # Layer 3: Threshold met - need embedding resolution
+        logger.info(f"[Stage3] Layer 2 threshold met, triggering Layer 3 embedding resolution")
         
-    Returns:
-        RewriteOutput with rewritten_query and relevant_meeting_ids
-    """
-    # Reset counter before running Stage 3
-    reset_pandas_query_counter()
+        embedding_result = resolve_by_embedding(base_query, person_name)
+        
+        if embedding_result:
+            stage3_meeting_ids = embedding_result.relevant_meeting_ids
+            rewritten_query = embedding_result.rewritten_query
+            logger.info(f"[Stage3] Resolved by Layer 3 (Embedding), meeting_ids: {stage3_meeting_ids}")
+        else:
+            # Embedding failed - fall back to regex result or base query
+            stage3_meeting_ids = regex_result.relevant_meeting_ids if regex_result else []
+            rewritten_query = base_query
+            logger.info(f"[Stage3] Embedding failed, using fallback result")
+    else:
+        # Threshold not met - regex resolved it well (or no ambiguity)
+        stage3_meeting_ids = regex_result.relevant_meeting_ids if regex_result else []
+        rewritten_query = base_query
+        logger.info(f"[Stage3] Layer 2 confirms clean, no embedding needed")
     
-    # Create session service
-    session_service = InMemorySessionService()
+    # ===== Final: Merge Stage 2/3 meeting IDs =====
+    final_meeting_ids = merge_all_meeting_ids(stage2_result, stage3_meeting_ids)
     
-    # Create session
-    session = await session_service.create_session(
-        app_name="query_rewriter_pipeline",
-        user_id="pipeline_user",
-        session_id="pipeline_session"
-    )
-    
-    # Create runner with the agent
-    runner = Runner(
-        agent=query_rewriter_agent,
-        app_name="query_rewriter_pipeline",
-        session_service=session_service
-    )
-    
-    # Create message as Content object
-    content = types.Content(
-        role='user',
-        parts=[types.Part(text=query)]
-    )
-    
-    # Run agent and collect events
-    final_response = None
-    
-    for event in runner.run(user_id="pipeline_user", session_id="pipeline_session", new_message=content):
-        # Get final response
-        if event.is_final_response() and event.content and event.content.parts:
-            for part in event.content.parts:
-                if hasattr(part, 'text'):
-                    final_response = part.text
-    
-    # Parse final response to get RewriteOutput
-    if final_response:
-        try:
-            # Extract JSON from response (might have markdown code blocks)
-            text = final_response
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0]
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0]
-            
-            parsed = json.loads(text.strip())
-            return RewriteOutput(
-                rewritten_query=parsed.get("rewritten_query", query),
-                relevant_meeting_ids=parsed.get("relevant_meeting_ids", [])
-            )
-        except Exception as e:
-            # If parsing fails, return original query with empty meeting_ids
-            pass
-    
-    # Return default if no response
     return RewriteOutput(
-        rewritten_query=query,
-        relevant_meeting_ids=[]
+        rewritten_query=rewritten_query,
+        relevant_meeting_ids=final_meeting_ids
     )
-
-
-# ============ Agent Class ============
-
-class QueryRewriterAgent(LlmAgent):
-    """Single Agent architecture for Query Rewrite - Stage 3 only"""
-    
-    def __init__(self):
-        llm_model = LiteLlm(
-            model="gpt-4o",
-            api_key=OPENAI_API_KEY,
-        )
-        
-        super().__init__(
-            name="QueryRewriteAgent",
-            model=llm_model,
-            instruction=AGENT_INSTRUCTION,
-            description="Rewrite ambiguous user queries into explicit ones",
-            tools=[
-                reset_counter_tool,
-                pandas_query_tool,
-            ],
-            output_schema=RewriteOutput,
-            output_key="rewrite_result",
-            include_contents= "none"
-        )
-
-
-# ============ Agent Instruction ============
-
-AGENT_INSTRUCTION = f"""
-You are a Query Rewrite Agent - Stage 3 (LLM ReAct)
-
-## CRITICAL: Only handle if "last N meetings" pattern EXISTS in the query!
-- If the query does NOT contain "last meeting", "last N meetings", "recent meetings", "past meetings", or "previous meetings", return the query AS IS with empty relevant_meeting_ids
-- Do NOT add meeting dates if they're not mentioned in the query
-- Do NOT call pandas_query unless the query explicitly mentions meeting count/time
-
-## IMPORTANT: This is Stage 3 of a 3-Stage Architecture
-- Stage 1 (Detection): Already executed by check_ambiguity function
-- Stage 2 (Resolution): Already executed by resolve_entities function
-- Stage 3 (This Agent): Handle ONLY "last N meetings" type ambiguities
-
-## Input to This Stage
-The query you receive has ALREADY been processed by Stage 1 and Stage 2:
-- First-person pronouns (I, me, my) → already replaced with "{CURRENT_USER}"
-- Absolute time expressions (yesterday, last week) → already resolved to dates
-- Person names → already resolved to full names
-
-Your job is to ONLY handle remaining ambiguities related to MEETING COUNT:
-- "last meeting" → need to find the actual date via pandas_query
-- "last N meetings" → need to find dates via pandas_query
-- "recent meetings" → need to find dates via pandas_query
-
-## Current User
-- current_user_name: {CURRENT_USER}
-
-## Your Tools
-1. reset_counter_tool: Reset the pandas_query call counter (MUST call this FIRST)
-2. pandas_query: Execute Pandas queries to get meeting information (MAX 3 CALLS - CODE ENFORCED)
-
-## IMPORTANT: Max 3 pandas_query Calls (Code Enforced)
-- You MUST NOT call pandas_query more than 3 times per query
-- If you reach 3 calls and still need more info, proceed with what you have
-- This limit is CODE-ENFORCED and cannot be bypassed
-
-## What You Should Do
-1. Call reset_counter_tool FIRST
-2. Analyze the query for "last N meetings" type patterns
-3. ONLY call pandas_query if the query explicitly mentions meeting count/time
-4. Rewrite the query by replacing "last N meetings" with actual dates
-5. Return the rewritten query and relevant_meeting_ids
-
-## Meeting Count Patterns to Handle (ONLY if present in query)
-- "last N meetings" (e.g., "last 3 meetings") → Call pandas_query(query_type="last_n_meetings", n=3, person_name="<person_name>")
-- "recent meetings" → Call pandas_query(query_type="last_n_meetings", n=3, person_name="<person_name>")
-- "recent N meetings" (e.g., "recent 5 meetings") → Call pandas_query(query_type="last_n_meetings", n=5, person_name="<person_name>")
-- "past meetings" → Call pandas_query(query_type="last_n_meetings", n=3, person_name="<person_name>")
-- "previous meetings" → Call pandas_query(query_type="last_n_meetings", n=3, person_name="<person_name>")
-- "last meeting" (singular) → Call pandas_query(query_type="last_n_meetings", n=1, person_name="<person_name>")
-
-## CRITICAL: Always pass person_name when available!
-- If the query mentions a specific person (e.g., "What did Hongye Qian discuss in the last 3 meetings?"), 
-  you MUST pass the person_name parameter to pandas_query
-- The person name has already been resolved to full name in Stage 2 (e.g., "Hongye" → "Hongye Qian")
-- Always include person_name to get meetings attended ONLY by that person
-- If no person is mentioned, you can omit person_name or pass null
-
-## What NOT to Do
-- Do NOT call check_ambiguity (already done in Stage 1)
-- Do NOT re-resolve pronouns or dates (already done in Stage 2)
-- Do NOT handle explicit person names or explicit dates
-
-## Output Format (must return JSON - simplified)
-{{
-  "rewritten_query": "What did Hongye Qian discuss in 2025-11-30?",
-  "relevant_meeting_ids": ["data001", "data002"]
-}}
-
-## CRITICAL: You MUST return meeting_ids in relevant_meeting_ids!
-- If you called pandas_query with query_type="last_n_meetings", you MUST extract meeting_ids from the response and include them in relevant_meeting_ids
-- This is NOT optional - the retrieval depends on this filter
-- Do NOT leave relevant_meeting_ids as empty list if you successfully called pandas_query
-
-## Important Reminders
-- Think in English, output in English JSON
-- Only handle "last N meetings" type ambiguities
-- meeting_ids are obtained through pandas_query
-"""
-
-
-# Create global instance
-query_rewriter_agent = QueryRewriterAgent()
-
-
-# ============ Test Code ============
-
-if __name__ == "__main__":
-    # Test tools
-    print("=== Test check_ambiguity ===")
-    result = check_ambiguity("What did I discuss in the last 3 meetings?")
-    print(result)
-    
-    # Test new rewrite_query function (Three-Stage Pipeline)
-    print("\n=== Test rewrite_query (Three-Stage Pipeline) ===")
-    result = rewrite_query("What did I discuss yesterday?")
-    print(f"Result: {result}")
-    print(f"  rewritten_query: {result.rewritten_query}")
-    print(f"  relevant_meeting_ids: {result.relevant_meeting_ids}")
-    
-    # Test with "last meeting" pattern
-    print("\n=== Test rewrite_query with 'last meeting' ===")
-    result = rewrite_query("What did Hongye discuss in the last meeting?")
-    print(f"Result: {result}")
-    print(f"  rewritten_query: {result.rewritten_query}")
-    print(f"  relevant_meeting_ids: {result.relevant_meeting_ids}")
