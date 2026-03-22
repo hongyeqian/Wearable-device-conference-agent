@@ -17,6 +17,12 @@ from google.adk.agents import BaseAgent, LlmAgent, SequentialAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event
 from google.adk.models import LiteLlm
+from google.adk.apps.app import App, EventsCompactionConfig
+from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
+from google.adk.plugins.base_plugin import BasePlugin
+from google.adk.models.llm_request import LlmRequest
+from google.adk.models.llm_response import LlmResponse
+from google.adk.agents.callback_context import CallbackContext
 
 from google.genai import types
 
@@ -28,13 +34,122 @@ from src.retrieval.vector_store_utils import VectorStoreUtilsMixin
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
 
 from sub_agents.query_rewriter_agent import rewrite_query_async, get_last_pandas_query_result
-from sub_agents.answer_agent import answer_synthesis_agent
 from sub_agents.planner_agent import planner_agent, Plan
 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class MemoryMonitorPlugin(BasePlugin):
+    """
+    Enhanced ADK Plugin to monitor session events and track LLM usage metadata.
+    Logs:
+    - Token usage (Prompt, Completion, Total) for different agents.
+    - Conversation context sent to the Planner agent (system instructions filtered).
+    - Session-level compaction diagnostics.
+    """
+    def __init__(self):
+        super().__init__(name="memory_monitor")
+
+    async def before_model_callback(self, *, callback_context: CallbackContext, llm_request: LlmRequest) -> Optional[LlmResponse]:
+        """
+        Intercept the model request to log the context being seen by specific agents.
+        """
+        # Fix: CallbackContext does not expose .agent directly, use .agent_name
+        agent_name = getattr(callback_context, "agent_name", "Internal (System/Compactor)")
+        
+        # We only care about printing dynamic context for PlannerAgent or relevant agents
+        if agent_name in ["PlannerAgent", "AnswerSynthesisAgent", "Internal (System/Compactor)"]:
+            print(f"\n" + "🔹" * 10)
+            print(f"📡 [LLM CALL] Starting request for: {agent_name}")
+            
+            # Print non-system contents (conversation history)
+            for i, content in enumerate(llm_request.contents):
+                if content.role != "system":
+                    # FIX: Iterate and join ALL text parts instead of just Parts[0]
+                    parts_texts = []
+                    if content.parts:
+                        for p in content.parts:
+                            if p.text:
+                                parts_texts.append(p.text)
+                    
+                    full_text = " ".join(parts_texts)
+                    
+                    # For long history, show preview
+                    preview = full_text[:500] + "..." if len(full_text) > 500 else full_text
+                    print(f"  📜 Context Item [{i}] ({content.role}): {preview}")
+                else:
+                    # Just mention system instruction exists without printing fully
+                    print(f"  📝 [System Instruction] (Filtered)")
+            print("🔹" * 10)
+        return None
+
+    async def after_model_callback(self, *, callback_context: CallbackContext, llm_response: LlmResponse) -> Optional[LlmResponse]:
+        """
+        Intercept the model response to extract and log usage metadata (tokens).
+        """
+        # Fix: CallbackContext does not expose .agent directly, use .agent_name
+        agent_name = getattr(callback_context, "agent_name", "Internal (System/Compactor)")
+        
+        usage = llm_response.usage_metadata
+        if usage:
+            print("\n" + "💰" * 10)
+            print(f"📊 [Token Usage] Agent: {agent_name}")
+            print(f"   📥 Prompt Tokens: {usage.prompt_token_count}")
+            print(f"   📤 Output Tokens: {usage.candidates_token_count}")
+            print(f"   ⚙️  Total Tokens: {usage.total_token_count}")
+            print("💰" * 10 + "\n")
+        return None
+
+    async def after_run_callback(self, *, invocation_context: "InvocationContext") -> None:
+        """
+        ADK Plugin to monitor session events and detect compaction behavior.
+        """
+        session = invocation_context.session
+        events = session.events
+        
+        # Gather all unique invocation IDs (ignoring metadata/compaction events)
+        invocation_ids = []
+        seen_inv_ids = set()
+        
+        for e in events:
+            if e.invocation_id and e.invocation_id not in seen_inv_ids:
+                if not (e.actions and e.actions.compaction):
+                    invocation_ids.append(e.invocation_id)
+                    seen_inv_ids.add(e.invocation_id)
+        
+        turn_count = len(invocation_ids)
+        
+        print("\n" + "🚀" * 15)
+        print(f"🔍 [MemoryMonitor] Session Diagnostics")
+        print(f"📂 Session ID: {session.id[:8]}...")
+        print(f"📈 Total Events: {len(events)}")
+        print(f"🔄 Completed Turns (Invocations): {turn_count}")
+        
+        # Look for compaction summary events using actions.compaction (Reliable)
+        summaries = [e for e in events if e.actions and e.actions.compaction]
+        
+        if summaries:
+            print(f"✅ COMPACTION DETECTED! Found {len(summaries)} summary event(s).")
+            latest_summary = summaries[-1]
+            comp_data = latest_summary.actions.compaction
+            
+            content = comp_data.compacted_content
+            if content and content.parts:
+                # JOIN ALL PARTS and print FULL text (no truncation)
+                full_summary = " ".join([p.text for p in content.parts if p.text])
+                print(f"📝 Full Summary Content:\n{full_summary}")
+            print(f"⏰ Compacted Range: {comp_data.start_timestamp} to {comp_data.end_timestamp}")
+        else:
+            threshold = 4 
+            if turn_count >= threshold:
+                print(f"⚠️  WARNING: Turn count ({turn_count}) >= threshold ({threshold}), but NO compaction found!")
+            else:
+                print(f"⏳ Waiting for threshold... (Current: {turn_count}/{threshold})")
+        
+        print("🚀" * 15 + "\n")
 
 
 # Clean useless environment variable SSL_CERT_FILE
@@ -172,7 +287,8 @@ class FullRAGSystemAgent(BaseAgent):
         rewrite_result = None
         if plan.need_rewrite:
             logger.info(f"[{self.name}] Running query rewrite...")
-            rewrite_result = await self._run_query_rewrite(user_query)
+            query_to_rewrite = plan.resolved_query if plan.resolved_query else user_query
+            rewrite_result = await self._run_query_rewrite(query_to_rewrite)
             if rewrite_result:
                 ctx.session.state["rewrite_result"] = {
                     "rewritten_query": rewrite_result.rewritten_query,
@@ -190,7 +306,7 @@ class FullRAGSystemAgent(BaseAgent):
                 retrieval_query = rewrite_result.rewritten_query
                 relevant_meeting_ids = rewrite_result.relevant_meeting_ids
             else:
-                retrieval_query = user_query
+                retrieval_query = plan.resolved_query if plan.resolved_query else user_query
                 relevant_meeting_ids = []
             
             retrieval_chunks = await self._run_retrieval(
@@ -238,6 +354,7 @@ class FullRAGSystemAgent(BaseAgent):
                     plan = Plan(
                         need_rewrite=plan_dict.get("need_rewrite", False),
                         need_rag=plan_dict.get("need_rag", True),
+                        resolved_query=plan_dict.get("resolved_query", user_query),
                         reason=plan_dict.get("reason", "")
                     )
                     logger.info(f"[{self.name}] Parsed plan from response: {plan}")
@@ -451,6 +568,25 @@ class FullRAGSystemAgent(BaseAgent):
         logger.info("=" * 80)
 
 
-# Create the root agent for Google ADK web UI
-# FullRAGSystemAgent now includes answer_synthesis_agent internally (方案B)
+# Create the root agent for Google ADK
+# FullRAGSystemAgent now includes answer_synthesis_agent internally
 root_agent = FullRAGSystemAgent(name="FullRAGSystemAgent")
+
+# Wrap into an App with Context Compaction for multi-turn history
+compaction_llm = LiteLlm(
+    model=OPENAI_MODEL or "gpt-4o-mini",
+    api_key=OPENAI_API_KEY,
+)
+
+compaction_config = EventsCompactionConfig(
+    compaction_interval=3,
+    overlap_size=1,
+    summarizer=LlmEventSummarizer(llm=compaction_llm)
+)
+
+app = App(
+    name="web_app",
+    root_agent=root_agent,
+    plugins=[MemoryMonitorPlugin()],
+    events_compaction_config=compaction_config
+)
