@@ -35,33 +35,34 @@ planner_llm = LiteLlm(
 planner_agent = LlmAgent(
     name="PlannerAgent",
     model=planner_llm,
-    instruction="""You are a smart query planner analyzing the user's latest query ({user_query}) to create execution plans.
-            
-The conversation history (context) will be automatically provided to you by the system.
+    instruction="""Analyze the user's latest query ({user_query}) using conversation history.
 
-Follow these 3 steps:
+STEP 1 — resolved_query
+Rewrite {user_query} into a standalone sentence.
+RESOLVE references that point back to conversation history:
+- "this/that meeting" → the specific meeting discussed earlier
+- "he/she/they/it" → the actual entity from context
+- Implicit topic continuation → make the subject explicit
+DO NOT resolve temporal ambiguities — keep expressions like "last meeting", "recent 3 meetings", "yesterday" as-is. Those are handled downstream.
+If {user_query} is already standalone, keep unchanged.
 
-STEP 1: Generate `resolved_query`
-- Look at the user's latest query. If it relies on conversational context (e.g., uses pronouns like "he", "that meeting", or implicitly continues a topic), incorporate the history to rewrite the latest query into a standalone, self-contained sentence.
-- If it does not rely on history, return the original {user_query} unmodified. This means orginal user query is `resolved_query`.
-- ALWAYS output a `resolved_query`.
+STEP 2 — need_rewrite
+Scan resolved_query for these keywords (if ANY found → True):
+- Pronouns: I, me, my, we, our, us
+- Time words: last, recent, previous, past, yesterday, today, this week, this month
+- A first name without surname (e.g. "Hongye" alone, not "Hongye Qian")
+If NONE of the above → False.
+Example: "What did Hongye discuss in the last meeting?" → True (contains "last", "Hongye" is partial name)
 
-STEP 2: Determine `need_rewrite`
-- Evaluate the `resolved_query` generated in Step 1.
-- HARD RULES for need_rewrite=True:
-  - If `resolved_query` contains first-person pronouns (I/we/my/our/us).
-  - If `resolved_query` contains relative time expressions (last N meetings, last week, yesterday, recent).
-  - If `resolved_query` contains a person's name, but you are not sure it's their full complete name.
-- If the `resolved_query` is perfectly explicit (e.g., specific date "2025-11-29", full exact names) and doesn't need external Pandas ID resolution, set need_rewrite=False.
+STEP 3 — need_rag
+RAG searches the meeting records database, NOT conversation history.
+True for ANY question about meetings: who attended, what was discussed, decisions, action items, topics, or any meeting content.
+False ONLY for: greetings, general knowledge, math, or writing tasks with no meeting connection.
+Default: when uncertain, set True.
 
-STEP 3: Determine `need_rag`
-- True if the `resolved_query` asks for knowledge from documents/meetings.
-- Skip RAG for general knowledge, greetings, or writing tasks.
-
-Return ONLY valid JSON that matches the schema.""",
+Return valid JSON matching the schema.""",
     description="Decides whether to use query rewrite and RAG retrieval",
     output_schema=Plan,
     output_key="plan",
-    # By omitting include_contents="none", we default to allowing ADK to ingest ctx.session.events
     include_contents="default"
 )

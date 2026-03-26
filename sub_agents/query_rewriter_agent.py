@@ -28,7 +28,7 @@ import numpy as np
 from sub_agents.pandas_utils import get_meetings_df
 
 from sub_agents.date_resolver import DateResolver
-from sub_agents.person_matcher import PersonMatcher
+from sub_agents.person_matcher import get_person_matcher
 
 
 # ============ Embedding Generator for Meeting Patterns ============
@@ -340,7 +340,6 @@ def check_ambiguity(query: str) -> str:
     """
     import spacy
     import dateparser
-    from sub_agents.person_matcher import PersonMatcher
     
     # Use module-level cache for spaCy model
     global _spacy_nlp
@@ -370,7 +369,7 @@ def check_ambiguity(query: str) -> str:
     
     # Person detection using PersonMatcher with pandas participants
     # This uses ListRecognizer for 100% accurate matching against actual meeting participants
-    matcher = PersonMatcher(threshold=0.6)
+    matcher = get_person_matcher()
     person_detection_result = matcher.detect_and_resolve(query)
     
     # Get detected and resolved person names

@@ -187,6 +187,23 @@ class PersonMatcher:
         }
 
 
+# ============ Module-level Singleton ============
+
+_person_matcher_instance = None
+
+def get_person_matcher(threshold: float = 0.6) -> "PersonMatcher":
+    """Get or create the module-level PersonMatcher singleton.
+    
+    Avoids re-initialising AnalyzerEngine on every query.
+    The instance (and its internal Presidio analyzer) is created once
+    and reused for the lifetime of the process.
+    """
+    global _person_matcher_instance
+    if _person_matcher_instance is None:
+        _person_matcher_instance = PersonMatcher(threshold=threshold)
+    return _person_matcher_instance
+
+
 # ============ Test Code ============
 if __name__ == "__main__":
     # Test with mock participants
