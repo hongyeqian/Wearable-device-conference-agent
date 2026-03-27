@@ -295,6 +295,11 @@ class FullRAGSystemAgent(BaseAgent):
                     "relevant_meeting_ids": rewrite_result.relevant_meeting_ids
                 }
                 logger.info(f"[{self.name}] Rewrite result: {rewrite_result.rewritten_query}")
+                # --- Debug: Print relevant meeting IDs ---
+                ids = rewrite_result.relevant_meeting_ids
+                print(f"\n{'🔎' * 10}")
+                print(f"📋 Relevant Meeting IDs ({len(ids)}): {ids if ids else 'None'}")
+                print(f"{'🔎' * 10}")
             else:
                 logger.warning(f"[{self.name}] Query rewrite failed, using original query")
         
@@ -317,6 +322,22 @@ class FullRAGSystemAgent(BaseAgent):
             
             ctx.session.state["retrieval_chunks"] = retrieval_chunks
             logger.info(f"[{self.name}] Retrieved {len(retrieval_chunks)} chunks")
+            # --- Debug: Print truncated chunk previews ---
+            print(f"\n{'📎' * 10}")
+            print(f"📦 Retrieved Chunks ({len(retrieval_chunks)}):")
+            for i, chunk in enumerate(retrieval_chunks, 1):
+                cid = chunk.get('chunk_id', 'N/A')
+                dt = chunk.get('metadata', {}).get('datetime', 'N/A')
+                text = chunk.get('text', '')
+                # First sentence + ... + last sentence
+                sentences = [s.strip() for s in text.replace('\n', ' ').split('.') if s.strip()]
+                if len(sentences) <= 2:
+                    preview = text[:200]
+                else:
+                    preview = f"{sentences[0]}...{sentences[-1]}."
+                print(f"  [{i}] {cid} | {dt}")
+                print(f"      {preview}")
+            print(f"{'📎' * 10}")
         else:
             # When RAG is not needed, still set empty chunks for answer agent
             ctx.session.state["retrieval_chunks"] = []
@@ -338,6 +359,9 @@ class FullRAGSystemAgent(BaseAgent):
         ctx.session.state["user_query"] = user_query
         
         # Run the planner agent and get events
+        # NOTE: Do NOT return early inside the async for loop.
+        # Early return causes GeneratorExit → OpenTelemetry context detach errors.
+        # Instead, store the result and break to let the generator close naturally.
         plan = None
         async for event in planner_agent.run_async(ctx):
             # Check if this is the final response
@@ -358,9 +382,11 @@ class FullRAGSystemAgent(BaseAgent):
                         reason=plan_dict.get("reason", "")
                     )
                     logger.info(f"[{self.name}] Parsed plan from response: {plan}")
-                    return plan
                 except json.JSONDecodeError as e:
                     logger.error(f"[{self.name}] Failed to parse plan JSON: {response_text}, error: {e}")
+        
+        if plan:
+            return plan
         
         # Fallback: default plan
         logger.warning(f"[{self.name}] Planner didn't return valid plan, using default")
@@ -571,6 +597,11 @@ class FullRAGSystemAgent(BaseAgent):
 # Create the root agent for Google ADK
 # FullRAGSystemAgent now includes answer_synthesis_agent internally
 root_agent = FullRAGSystemAgent(name="FullRAGSystemAgent")
+
+# Pre-load all lazy-initialized NLP components (spaCy, Presidio, pandas, embeddings)
+# so the first user query does not incur loading overhead.
+from sub_agents.query_rewriter_agent import warmup_all as _warmup_nlp
+_warmup_nlp()
 
 # Wrap into an App with Context Compaction for multi-turn history
 compaction_llm = LiteLlm(

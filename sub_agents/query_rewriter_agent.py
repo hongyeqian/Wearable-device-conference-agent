@@ -30,6 +30,9 @@ from sub_agents.pandas_utils import get_meetings_df
 from sub_agents.date_resolver import DateResolver
 from sub_agents.person_matcher import get_person_matcher
 
+# Module-level spaCy model cache (loaded lazily or via warmup_all())
+_spacy_nlp = None
+
 
 # ============ Embedding Generator for Meeting Patterns ============
 
@@ -341,11 +344,10 @@ def check_ambiguity(query: str) -> str:
     import spacy
     import dateparser
     
-    # Use module-level cache for spaCy model
     global _spacy_nlp
     
-    # Lazy load spaCy model
-    if '_spacy_nlp' not in globals():
+    # Lazy load spaCy model if not already loaded by warmup_all()
+    if _spacy_nlp is None:
         try:
             _spacy_nlp = spacy.load("en_core_web_sm")
         except OSError:
@@ -767,3 +769,47 @@ async def rewrite_query_async(query: str) -> RewriteOutput:
         rewritten_query=rewritten_query,
         relevant_meeting_ids=final_meeting_ids
     )
+
+
+# ============ Startup Warmup ============
+
+def warmup_all():
+    """Pre-load all lazy-initialized NLP components at startup.
+
+    Call this once during application startup so the first user query
+    does not incur the overhead of loading spaCy, Presidio, pandas
+    DataFrames, and embedding models.
+    """
+    import spacy
+    global _spacy_nlp
+
+    logger.info("[Warmup] Pre-loading NLP components...")
+
+    # 1. pandas MeetingsDataFrame
+    logger.info("[Warmup]  Loading MeetingsDataFrame...")
+    get_meetings_df()
+
+    # 2. PersonMatcher singleton + Presidio AnalyzerEngine
+    logger.info("[Warmup]  Loading PersonMatcher + Presidio AnalyzerEngine...")
+    matcher = get_person_matcher()
+    matcher._get_analyzer()
+
+    # 3. spaCy model
+    logger.info("[Warmup]  Loading spaCy model (en_core_web_sm)...")
+    if _spacy_nlp is None:
+        try:
+            _spacy_nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            import subprocess
+            subprocess.run(
+                ["python", "-m", "spacy", "download", "en_core_web_sm"],
+                check=True,
+            )
+            _spacy_nlp = spacy.load("en_core_web_sm")
+
+    # 4. EmbeddingGenerator + pre-computed pattern embeddings
+    logger.info("[Warmup]  Loading EmbeddingGenerator + pattern embeddings...")
+    get_embedding_generator()
+    _get_pattern_embeddings()
+
+    logger.info("[Warmup] All NLP components loaded successfully!")

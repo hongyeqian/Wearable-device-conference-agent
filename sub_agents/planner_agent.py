@@ -50,9 +50,9 @@ STEP 2 — need_rewrite
 Scan resolved_query for these keywords (if ANY found → True):
 - Pronouns: I, me, my, we, our, us
 - Time words: last, recent, previous, past, yesterday, today, this week, this month
-- A first name without surname (e.g. "Hongye" alone, not "Hongye Qian")
+- If it appers a name (e.g. "Hongye", "Hongye Qian", "Qian")
 If NONE of the above → False.
-Example: "What did Hongye discuss in the last meeting?" → True (contains "last", "Hongye" is partial name)
+Example: "What did Hongye discuss in the last meeting?" → True (contains "last", "Hongye" is a name)
 
 STEP 3 — need_rag
 RAG searches the meeting records database, NOT conversation history.
