@@ -1,0 +1,174 @@
+[
+  {
+    "user_id": "user_001",
+    "name": "Alice Chen",
+    "role": "Project Manager",
+    "language": "en",
+    "response_length": "concise",
+    "response_format": "bullet_points",
+    "tone": "professional",
+    "focus_area": "action_items",
+    "preferred_meeting_times": [
+      "weekday mornings 9:00-12:00"
+    ],
+    "unavailable_times": [
+      "Friday all day",
+      "Monday before 10:00"
+    ]
+  },
+  {
+    "user_id": "user_002",
+    "name": "Bob Zhang",
+    "role": "ML Engineer",
+    "language": "zh-en-mixed",
+    "response_length": "detailed",
+    "response_format": "paragraphs",
+    "tone": "casual",
+    "focus_area": "technical_discussions",
+    "preferred_meeting_times": [
+      "weekday afternoons 14:00-17:00"
+    ],
+    "unavailable_times": [
+      "Wednesday all day",
+      "weekends"
+    ]
+  },
+  {
+    "user_id": "user_003",
+    "name": "Charlie Wang",
+    "role": "Research Scientist",
+    "language": "en",
+    "response_length": "detailed",
+    "response_format": "structured_sections",
+    "tone": "academic",
+    "focus_area": "research_findings",
+    "preferred_meeting_times": [
+      "Tuesday and Thursday 10:00-12:00",
+      "Friday 14:00-16:00"
+    ],
+    "unavailable_times": [
+      "Monday all day",
+      "Wednesday afternoon"
+    ]
+  },
+  {
+    "user_id": "user_004",
+    "name": "Diana Liu",
+    "role": "Product Designer",
+    "language": "zh-CN",
+    "response_length": "moderate",
+    "response_format": "mixed",
+    "tone": "friendly",
+    "focus_area": "user_experience",
+    "preferred_meeting_times": [
+      "weekday mornings 10:00-12:00"
+    ],
+    "unavailable_times": [
+      "Thursday all day",
+      "Friday after 15:00"
+    ]
+  },
+  {
+    "user_id": "user_005",
+    "name": "Edward Park",
+    "role": "Data Analyst",
+    "language": "en",
+    "response_length": "concise",
+    "response_format": "tables",
+    "tone": "formal",
+    "focus_area": "data_metrics",
+    "preferred_meeting_times": [
+      "Monday and Wednesday 09:00-11:00"
+    ],
+    "unavailable_times": [
+      "Tuesday all day",
+      "Friday after 14:00"
+    ]
+  },
+  {
+    "user_id": "user_006",
+    "name": "Fiona Martinez",
+    "role": "Engineering Lead",
+    "language": "en",
+    "response_length": "moderate",
+    "response_format": "bullet_points",
+    "tone": "direct",
+    "focus_area": "decisions_and_blockers",
+    "preferred_meeting_times": [
+      "weekday afternoons 13:00-15:00"
+    ],
+    "unavailable_times": [
+      "Monday morning before 11:00",
+      "Friday all day"
+    ]
+  },
+  {
+    "user_id": "user_007",
+    "name": "Grace Kim",
+    "role": "QA Engineer",
+    "language": "en",
+    "response_length": "detailed",
+    "response_format": "numbered_steps",
+    "tone": "methodical",
+    "focus_area": "quality_issues",
+    "preferred_meeting_times": [
+      "Tuesday and Thursday 14:00-16:00"
+    ],
+    "unavailable_times": [
+      "Wednesday all day",
+      "Monday morning"
+    ]
+  },
+  {
+    "user_id": "user_008",
+    "name": "Hongye Qian",
+    "role": "AI Engineer",
+    "language": "zh-en-mixed",
+    "response_length": "moderate",
+    "response_format": "structured_sections",
+    "tone": "professional",
+    "focus_area": "all",
+    "preferred_meeting_times": [
+      "weekday afternoons 14:00-18:00"
+    ],
+    "unavailable_times": [
+      "Saturday all day",
+      "Sunday morning"
+    ]
+  },
+  {
+    "user_id": "user_009",
+    "name": "Ivan Petrov",
+    "role": "DevOps Engineer",
+    "language": "en",
+    "response_length": "concise",
+    "response_format": "bullet_points",
+    "tone": "technical",
+    "focus_area": "infrastructure_updates",
+    "preferred_meeting_times": [
+      "Monday and Friday 10:00-12:00"
+    ],
+    "unavailable_times": [
+      "Tuesday afternoon",
+      "Thursday all day"
+    ]
+  },
+  {
+    "user_id": "user_010",
+    "name": "Julia Santos",
+    "role": "Scrum Master",
+    "language": "en",
+    "response_length": "moderate",
+    "response_format": "mixed",
+    "tone": "encouraging",
+    "focus_area": "team_progress",
+    "preferred_meeting_times": [
+      "weekday mornings 09:00-11:00",
+      "Wednesday afternoon 14:00-16:00"
+    ],
+    "unavailable_times": [
+      "Friday after 12:00",
+      "weekends"
+    ]
+  }
+]

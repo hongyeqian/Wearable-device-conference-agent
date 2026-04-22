@@ -56,7 +56,16 @@ def main():
     import web_app.agent  # noqa: F401  (import triggers side effects)
 
     logger.info("=" * 60)
-    logger.info("All components loaded. Starting ADK web server...")
+    logger.info("All components loaded. Starting MeetingWatcher for hot reload...")
+    logger.info("=" * 60)
+
+    # Start file system watcher for automatic meeting hot reload.
+    # This monitors datademo/ for new con* directories and triggers
+    # incremental indexing when all 4 required files are present.
+    web_app.agent.root_agent.start_watcher()
+
+    logger.info("=" * 60)
+    logger.info("MeetingWatcher started. Launching ADK web server...")
     logger.info("=" * 60)
 
     # ------------------------------------------------------------------

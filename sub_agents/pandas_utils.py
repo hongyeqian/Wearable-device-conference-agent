@@ -234,6 +234,21 @@ def get_meetings_df() -> MeetingsDataFrame:
     return _meetings_df
 
 
+def reload_meetings_df() -> MeetingsDataFrame:
+    """Force-rebuild the global MeetingsDataFrame singleton.
+
+    Call this after new meetings have been indexed so that the pandas
+    metadata cache (used by query rewriter, person matcher, etc.)
+    reflects the latest data on disk (summary_metadata.json files).
+
+    Returns:
+        The newly created MeetingsDataFrame instance.
+    """
+    global _meetings_df
+    _meetings_df = MeetingsDataFrame()
+    return _meetings_df
+
+
 # ============ Test Code ============
 if __name__ == "__main__":
     mdf = get_meetings_df()

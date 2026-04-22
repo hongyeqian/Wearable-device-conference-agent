@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Optional, Set, Dict, Any, List, AsyncGenerator
 from datetime import datetime
@@ -222,6 +223,12 @@ class FullRAGSystemAgent(BaseAgent):
         # Initialize answer synthesis agent (for integrated answer generation)
         from sub_agents.answer_agent import answer_synthesis_agent as answer_agent
         self.answer_synthesis_agent = answer_agent
+        
+        # Lock for thread-safe incremental sync (hot reload)
+        self._sync_lock = threading.Lock()
+        
+        # MeetingWatcher instance (started later via start_watcher())
+        self._watcher = None
         
         # THEN initialize RAG components
         logger.info("=" * 80)
@@ -592,6 +599,144 @@ class FullRAGSystemAgent(BaseAgent):
         logger.info(f" Processed meetings: {len(processed_meeting_ids)}")
         logger.info(f"   New meetings processed: {len(new_meetings)}")
         logger.info("=" * 80)
+
+    # ================================================================
+    #  Hot Reload: Incremental Sync & Watcher
+    # ================================================================
+
+    def _incremental_sync(self, new_con_dirs: List[Path]) -> None:
+        """
+        Incrementally index new meetings detected by MeetingWatcher.
+
+        This method is called from the watcher's background thread.
+        It is protected by _sync_lock to prevent concurrent writes
+        to the vector store.  Read operations (user queries) are NOT
+        blocked — they simply see the old data until the sync completes
+        (eventual consistency).
+
+        Steps:
+            1. Load each new meeting via DataLoader
+            2. Chunk them with HierarchicalChunker
+            3. Add chunks to the existing vector store
+            4. Persist vector store to disk
+            5. Reload the pandas MeetingsDataFrame singleton
+            6. Update self.all_meeting_ids
+
+        Args:
+            new_con_dirs: List of Paths to newly detected con* directories.
+        """
+        with self._sync_lock:
+            logger.info("\n" + "🔄" * 20)
+            logger.info(
+                f"[IncrementalSync] Processing {len(new_con_dirs)} new meeting dir(s): "
+                f"{[d.name for d in new_con_dirs]}"
+            )
+
+            if self.retriever is None or self.retriever.vector_store is None:
+                logger.error("[IncrementalSync] Retriever / VectorStore not initialized, aborting.")
+                return
+
+            vector_store = self.retriever.vector_store
+            include_chunk_level = False  # Consistent with _initialize_components
+
+            loader = DataLoader(DATA_DIR)
+            new_meetings = []
+
+            # Step 1: Load meetings from the new directories
+            for con_dir in new_con_dirs:
+                try:
+                    meeting = loader._load_meeting(con_dir)
+                    new_meetings.append(meeting)
+                    logger.info(
+                        f"[IncrementalSync]   ✓ Loaded: {meeting.meeting_id} - {meeting.title}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"[IncrementalSync]   ✗ Failed to load {con_dir.name}: {e}",
+                        exc_info=True,
+                    )
+
+            if not new_meetings:
+                logger.warning("[IncrementalSync] No meetings loaded successfully, aborting.")
+                return
+
+            # Step 2: Chunk new meetings
+            logger.info("[IncrementalSync] Chunking new meetings...")
+            chunker = HierarchicalChunker()
+            new_chunks = chunker.chunk_all_levels(new_meetings, include_chunk_level=include_chunk_level)
+
+            for level, chunks in new_chunks.items():
+                logger.info(f"[IncrementalSync]   {level:10s}: {len(chunks):4d} chunks")
+
+            # Step 3: Add chunks to vector store
+            logger.info("[IncrementalSync] Adding chunks to vector store...")
+            for level in ['metadata', 'summary', 'meeting']:
+                chunks = new_chunks.get(level, [])
+                if chunks:
+                    vector_store.add_chunks(
+                        chunks=chunks,
+                        level=level,
+                        generate_embedding=True,
+                    )
+                    logger.info(
+                        f"[IncrementalSync]   ✓ Added {len(chunks)} chunks to {level} level"
+                    )
+
+            # Step 4: Persist vector store to disk
+            logger.info("[IncrementalSync] Saving vector store...")
+            vector_store.save(VECTOR_STORE_DIR)
+
+            # Step 5: Reload pandas MeetingsDataFrame singleton
+            # (summary_metadata.json was generated in Step 1 by DataLoader)
+            logger.info("[IncrementalSync] Reloading MeetingsDataFrame...")
+            from sub_agents.pandas_utils import reload_meetings_df
+            mdf = reload_meetings_df()
+            logger.info(
+                f"[IncrementalSync]   ✓ MeetingsDataFrame reloaded: "
+                f"{len(mdf.df)} meetings in DataFrame"
+            )
+
+            # Step 6: Update meeting ID registry
+            new_ids = {m.meeting_id for m in new_meetings}
+            self.all_meeting_ids.update(new_ids)
+            self.total_meetings = len(self.all_meeting_ids)
+
+            logger.info("\n" + "=" * 60)
+            logger.info("[IncrementalSync] ✅ Incremental sync complete!")
+            logger.info(f"  New meetings indexed: {[m.meeting_id for m in new_meetings]}")
+            logger.info(f"  Total meetings now: {self.total_meetings}")
+            logger.info("=" * 60 + "\n")
+
+    def start_watcher(self) -> None:
+        """
+        Start the MeetingWatcher to monitor data directory for new meetings.
+
+        Should be called AFTER _initialize_components() has completed.
+        The watcher runs in a daemon thread and will not block shutdown.
+        """
+        from src.watcher.meeting_watcher import MeetingWatcher
+
+        # Derive processed directory names from all_meeting_ids.
+        # Convention: meeting_id like "data001" lives in folder "con1",
+        # but we track by the actual directory names found on disk.
+        data_dir = Path(DATA_DIR)
+        processed_dir_names = set()
+        for con_dir in data_dir.glob("con*"):
+            if con_dir.is_dir():
+                processed_dir_names.add(con_dir.name)
+
+        self._watcher = MeetingWatcher(
+            data_dir=data_dir,
+            on_new_meetings_callback=self._incremental_sync,
+            processed_meeting_dirs=processed_dir_names,
+        )
+        self._watcher.start()
+
+    def stop_watcher(self) -> None:
+        """Stop the MeetingWatcher if running."""
+        if self._watcher is not None:
+            self._watcher.stop()
+            self._watcher = None
 
 
 # Create the root agent for Google ADK
