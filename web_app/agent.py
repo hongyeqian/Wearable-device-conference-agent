@@ -16,7 +16,7 @@ from typing import Optional, Set
 
 from google.adk.agents import BaseAgent, LlmAgent, SequentialAgent
 from google.adk.agents.invocation_context import InvocationContext
-from google.adk.events import Event
+from google.adk.events import Event, EventActions
 from google.adk.models import LiteLlm
 from google.adk.apps.app import App, EventsCompactionConfig
 from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
@@ -36,12 +36,14 @@ from src.retrieval.hierarchical_retriever import HierarchicalRetriever
 
 from sub_agents.query_rewriter_agent import rewrite_query_async, get_last_pandas_query_result
 from sub_agents.planner_agent import planner_agent, Plan
+from sub_agents.intent_router import route_intent
+from skills.registry import dispatch as skill_dispatch
+from sub_agents import short_memory
 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 class MemoryMonitorPlugin(BasePlugin):
     """
@@ -272,7 +274,95 @@ class FullRAGSystemAgent(BaseAgent):
             return
         
         logger.info(f"[{self.name}] Processing query: {user_query}")
-        
+
+        # ----------------------------------------------------------------- #
+        # Unified routing decision
+        # ----------------------------------------------------------------- #
+        # 1. Build short context from session state
+        # 2. Ask intent_router for a single routing decision
+        # 3. Execute the decision (pending_action / skill / planner)
+        short_context = short_memory.get_short_context(ctx)
+        print(
+            f"[Routing] Start of turn. session.state keys: {list(ctx.session.state.keys())}, "
+            f"pending={'present' if short_context.get('pending_confirmation') else 'None'}"
+        )
+        decision = route_intent(user_query, short_context)
+        print(
+            f"[Routing] decision: route_type={decision['route_type']!r}, "
+            f"source={decision.get('router_source')!r}"
+        )
+        route_type = decision["route_type"]
+
+        # ----------------------------------------------------------------- #
+        # Branch A — pending_action (confirm / reject / unclear / override)
+        # ----------------------------------------------------------------- #
+        if route_type == "pending_action":
+            response_text, state_delta = self._execute_pending_action(decision)
+            yield self._make_event(text=response_text, state_delta=state_delta)
+            return
+
+        # For skill / planner branches, optionally clear a stale pending first.
+        pending_clear_delta: Optional[Dict[str, Any]] = (
+            {"pending_confirmation": None} if decision.get("pending_to_clear") else None
+        )
+        if pending_clear_delta:
+            print("[Routing] new_request from pending — will clear pending state")
+
+        # ----------------------------------------------------------------- #
+        # Branch B — skill dispatch
+        # ----------------------------------------------------------------- #
+        if route_type == "skill":
+            skill_name = decision["skill_name"]
+            logger.info(
+                f"[IntentRouter] Matched skill '{skill_name}' "
+                f"(score={decision['score']:.2f}, confidence={decision['confidence']}, "
+                f"source={decision.get('router_source')})"
+            )
+            try:
+                skill_result = skill_dispatch(skill_name, user_query)
+            except Exception as exc:
+                logger.error(f"[IntentRouter] Skill dispatch error: {exc}")
+                skill_result = {"status": "error", "text_output": f"Skill error: {exc}"}
+
+            if skill_result.get("status") == "error":
+                logger.error(
+                    f"[IntentRouter] Skill '{skill_name}' returned error: {skill_result.get('error')}"
+                )
+
+            # In-turn flags read by answer_synthesis_agent's before_agent_callback
+            ctx.session.state["preserve_skill_output_format"] = True
+            ctx.session.state["protected_skill_output"] = skill_result
+            ctx.session.state["protected_skill_name"] = skill_name
+            print(f"[SkillOutputGuard] Set protected_skill_output for skill={skill_name!r}")
+
+            new_pending = short_memory.build_pending_confirmation(
+                skill_name=skill_name,
+                user_query=user_query,
+                skill_result=skill_result,
+            )
+            combined_delta: Dict[str, Any] = dict(pending_clear_delta or {})
+            if new_pending is not None:
+                combined_delta["pending_confirmation"] = new_pending
+                print(
+                    f"[ShortMemory] Stored pending confirmation via state_delta: "
+                    f"type={new_pending['type']!r}, skill={skill_name!r}"
+                )
+            text_output = skill_result.get("text_output") or "(Skill executed but returned no text output)"
+            logger.info(f"[IntentRouter] Returning skill output, skipping planner/RAG/answer pipeline")
+            yield self._make_event(text=text_output, state_delta=combined_delta or None)
+            return
+
+        # ----------------------------------------------------------------- #
+        # Branch C — planner / RAG fallback (route_type == "planner")
+        # ----------------------------------------------------------------- #
+        logger.info(
+            f"[IntentRouter] No skill matched, falling back to planner/RAG "
+            f"(reason: {decision['reason']})"
+        )
+        if pending_clear_delta:
+            print("[Routing] Clearing pending state via state_delta before planner")
+            yield self._make_event(state_delta=pending_clear_delta)
+
         # Step 2: Run planner agent to decide need_rewrite / need_rag
         logger.info(f"[{self.name}] Running planner agent...")
         plan = await self._run_planner(ctx, user_query)
@@ -485,6 +575,99 @@ class FullRAGSystemAgent(BaseAgent):
             logger.error(f"[{self.name}] Retrieval error: {e}")
             return []
     
+    def _make_event(
+        self,
+        *,
+        text: Optional[str] = None,
+        state_delta: Optional[Dict[str, Any]] = None,
+    ) -> Event:
+        """
+        Build an ADK Event without ever passing actions=None to the constructor.
+
+        ADK's pydantic Event schema rejects an explicit None for `actions` —
+        the field must either be omitted or be a real EventActions instance.
+        This helper centralises that rule so callers do not have to remember it.
+        """
+        kwargs: Dict[str, Any] = {"author": self.name}
+        if text is not None:
+            kwargs["content"] = types.Content(
+                role="assistant",
+                parts=[types.Part(text=text)],
+            )
+        if state_delta:
+            kwargs["actions"] = EventActions(state_delta=state_delta)
+        return Event(**kwargs)
+
+    def _execute_pending_action(self, decision: Dict[str, Any]) -> tuple:
+        """
+        Execute a route_type='pending_action' decision from the Intent Router.
+
+        Returns (response_text, state_delta).
+            state_delta is None when pending should be kept (unclear / override-no-match),
+            otherwise {"pending_confirmation": None} to clear it.
+        """
+        from skills.send_email import send_meeting_notification
+
+        pending = decision["pending"]
+        action = decision["action"]
+        CLEAR: Dict[str, Any] = {"pending_confirmation": None}
+
+        if action == "confirm":
+            print("[Routing] pending_action.confirm — sending notification, clearing pending")
+            return send_meeting_notification(pending), CLEAR
+
+        if action == "confirm_with_recipient_override":
+            raw_names = decision.get("recipient_override") or []
+            validated = short_memory._match_participants(
+                raw_names, pending.get("participants", [])
+            )
+            if not validated:
+                all_str = ", ".join(pending.get("participants", [])) or "the participants"
+                unrecognized = ", ".join(raw_names) if raw_names else "the specified recipient"
+                print(
+                    f"[Routing] confirm_with_recipient_override but validated=[]; keep pending "
+                    f"(raw_names={raw_names!r})"
+                )
+                return (
+                    f"I couldn't find {unrecognized} in the pending meeting participants. "
+                    f"Please choose from: {all_str}.",
+                    None,
+                )
+            print(f"[Routing] confirm_with_recipient_override — sending to {validated!r}")
+            pending_for_email = dict(pending)
+            pending_for_email["participants"] = validated
+            return send_meeting_notification(pending_for_email), CLEAR
+
+        if action == "reject":
+            participants_str = (
+                ", ".join(pending.get("participants", [])) or "the participants"
+            )
+            print("[Routing] pending_action.reject — clearing pending")
+            return (
+                f"Understood. Email notifications will not be sent to {participants_str}.",
+                CLEAR,
+            )
+
+        if action == "unclear":
+            title = pending.get("title", "the meeting")
+            participants_str = (
+                ", ".join(pending.get("participants", [])) or "the participants"
+            )
+            print("[Routing] pending_action.unclear — keeping pending")
+            return (
+                f"I'm not sure whether you'd like to send email notifications for "
+                f"'{title}' to {participants_str}. "
+                f"Please reply with 'yes' to send or 'no' to skip.",
+                None,
+            )
+
+        # Defensive fallback for an unknown pending action
+        print(f"[Routing] WARNING: unknown pending action={action!r} — clearing pending")
+        return (
+            f"(Internal) Unknown pending action: {action}. Pending state cleared.",
+            CLEAR,
+        )
+
     def _initialize_components(self):
         """
         Initialize all RAG components: data loader, vector store, retriever.
