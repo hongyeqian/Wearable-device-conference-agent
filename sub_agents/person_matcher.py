@@ -3,6 +3,7 @@ Person fuzzy matching utility
 Uses Presidio + TheFuzz for robust person name matching against meeting participants
 """
 from typing import List, Optional, Dict, Any
+# pyrefly: ignore [missing-import]
 from thefuzz import fuzz, process
 
 
@@ -137,8 +138,9 @@ class PersonMatcher:
         """
         # Get participants from pandas if not provided
         if participants is None:
-            from sub_agents.pandas_utils import get_meetings_df
-            mdf = get_meetings_df()
+            from sub_agents.metadata_manager import get_meetings_metadata
+            current_user = getattr(self, 'current_user', "")
+            mdf = get_meetings_metadata(current_user)
             participants = mdf.get_all_participants()
         
         # Step 1: Detect persons using Presidio (good for full names)
@@ -191,7 +193,7 @@ class PersonMatcher:
 
 _person_matcher_instance = None
 
-def get_person_matcher(threshold: float = 0.6) -> "PersonMatcher":
+def get_person_matcher(current_user: str = "", threshold: float = 0.6) -> "PersonMatcher":
     """Get or create the module-level PersonMatcher singleton.
     
     Avoids re-initialising AnalyzerEngine on every query.
@@ -201,6 +203,7 @@ def get_person_matcher(threshold: float = 0.6) -> "PersonMatcher":
     global _person_matcher_instance
     if _person_matcher_instance is None:
         _person_matcher_instance = PersonMatcher(threshold=threshold)
+    _person_matcher_instance.current_user = current_user
     return _person_matcher_instance
 
 

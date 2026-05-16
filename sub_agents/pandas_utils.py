@@ -21,40 +21,43 @@ class MeetingsDataFrame:
         data_dir = Path(DATA_DIR)
         records = []
         
-        for con_dir in sorted(data_dir.glob("con*")):
-            if not con_dir.is_dir():
-                continue
+        for user_dir in data_dir.glob("*"):
+            if not user_dir.is_dir(): continue
             
-            summary_meta_file = con_dir / "summary_metadata.json"
-            if summary_meta_file.exists():
-                try:
-                    with open(summary_meta_file, 'r', encoding='utf-8') as f:
-                        metadata = json.load(f)
-                    
-                    # Flatten metadata
-                    record = {
-                        "meeting_id": metadata.get("meeting_id", ""),
-                        "datetime": metadata.get("datetime", ""),
-                        "date": self._extract_date(metadata.get("datetime", "")),
-                        "year": self._extract_year(metadata.get("datetime", "")),
-                        "month": self._extract_month(metadata.get("datetime", "")),
-                        "day": self._extract_day(metadata.get("datetime", "")),
-                        "participants": metadata.get("participants", []),
-                        "participants_str": ", ".join(metadata.get("participants", [])),
-                        "topics": metadata.get("topics", []),
-                        "topics_str": "; ".join(metadata.get("topics", [])),
-                    }
-                    
-                    # Process actions
-                    actions = metadata.get("actions", [])
-                    action_tasks = [a.get("task", "") for a in actions if a.get("task")]
-                    record["action_tasks"] = action_tasks
-                    record["action_tasks_str"] = "; ".join(action_tasks)
-                    
-                    records.append(record)
-                    
-                except Exception as e:
-                    print(f"Warning: Failed to load {summary_meta_file}: {e}")
+            for con_dir in user_dir.glob("con*"):
+                if not con_dir.is_dir(): continue
+                
+                summary_meta_file = con_dir / "summary_metadata.json"
+                if summary_meta_file.exists():
+                    try:
+                        with open(summary_meta_file, 'r', encoding='utf-8') as f:
+                            metadata = json.load(f)
+                        
+                        # Flatten metadata
+                        record = {
+                            "meeting_id": metadata.get("meeting_id", ""),
+                            "owner": user_dir.name,  # The username from directory structure
+                            "datetime": metadata.get("datetime", ""),
+                            "date": self._extract_date(metadata.get("datetime", "")),
+                            "year": self._extract_year(metadata.get("datetime", "")),
+                            "month": self._extract_month(metadata.get("datetime", "")),
+                            "day": self._extract_day(metadata.get("datetime", "")),
+                            "participants": metadata.get("participants", []),
+                            "participants_str": ", ".join(metadata.get("participants", [])),
+                            "topics": metadata.get("topics", []),
+                            "topics_str": "; ".join(metadata.get("topics", [])),
+                        }
+                        
+                        # Process actions
+                        actions = metadata.get("actions", [])
+                        action_tasks = [a.get("task", "") for a in actions if a.get("task")]
+                        record["action_tasks"] = action_tasks
+                        record["action_tasks_str"] = "; ".join(action_tasks)
+                        
+                        records.append(record)
+                        
+                    except Exception as e:
+                        print(f"Warning: Failed to load {summary_meta_file}: {e}")
         
         self.df = pd.DataFrame(records)
         # Sort by date (newest first)
@@ -104,34 +107,45 @@ class MeetingsDataFrame:
                 pass
         return None
     
-    def get_all_participants(self) -> List[str]:
-        """Get all unique participants"""
+    def _get_df_for_user(self, current_user: Optional[str] = None) -> pd.DataFrame:
+        """Get DataFrame filtered by user owner"""
         if self.df is None or self.df.empty:
+            return pd.DataFrame()
+        if not current_user:
+            return self.df
+        return self.df[self.df["owner"] == current_user]
+
+    def get_all_participants(self, current_user: Optional[str] = None) -> List[str]:
+        """Get all unique participants for the given user"""
+        df = self._get_df_for_user(current_user)
+        if df.empty:
             return []
         all_parts = []
-        for parts in self.df["participants"]:
+        for parts in df["participants"]:
             if isinstance(parts, list):
                 all_parts.extend(parts)
         return list(set(all_parts))
     
-    def find_person(self, fuzzy_name: str, threshold: float = 0.6) -> List[str]:
+    def find_person(self, fuzzy_name: str, current_user: Optional[str] = None, threshold: float = 0.6) -> List[str]:
         """
         Fuzzy match person name
         
         Args:
             fuzzy_name: Fuzzy input (e.g., "Hongye", "hq", "he")
+            current_user: The authenticated user to filter matches by
             threshold: Similarity threshold
             
         Returns:
             List of matched participants
         """
-        if self.df is None or self.df.empty:
+        df = self._get_df_for_user(current_user)
+        if df.empty:
             return []
         
         from thefuzz import fuzz
         from thefuzz import process
         
-        all_participants = self.get_all_participants()
+        all_participants = self.get_all_participants(current_user)
         
         # Use thefuzz for fuzzy matching
         matches = process.extract(
@@ -149,25 +163,25 @@ class MeetingsDataFrame:
         
         return result
     
-    def get_last_n_meetings(self, n: int = 3, person_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_last_n_meetings(self, n: int = 3, person_name: Optional[str] = None, current_user: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get the last N meetings
         
         Args:
             n: Number of meetings to return
             person_name: Optional. If provided, returns only meetings attended by this person
+            current_user: Optional. If provided, filters by meeting owner
         
         Returns:
             List of meetings (sorted by date, newest first)
         """
-        if self.df is None or self.df.empty:
+        df_to_use = self._get_df_for_user(current_user)
+        if df_to_use.empty:
             return []
-        
-        df_to_use = self.df
         
         # If person_name is provided, filter by person first
         if person_name:
-            df_to_use = self.filter_by_person(person_name)
+            df_to_use = self.filter_by_person(person_name, current_user=current_user)
             if df_to_use.empty:
                 return []
         
@@ -176,44 +190,47 @@ class MeetingsDataFrame:
         result = df_to_use.head(n).to_dict("records")
         return result
     
-    def filter_by_person(self, person_name: str) -> pd.DataFrame:
+    def filter_by_person(self, person_name: str, current_user: Optional[str] = None) -> pd.DataFrame:
         """Filter meetings by person name"""
-        if self.df is None or self.df.empty:
+        df = self._get_df_for_user(current_user)
+        if df.empty:
             return pd.DataFrame()
         
         # Check if person name is in participants list
-        mask = self.df["participants"].apply(
+        mask = df["participants"].apply(
             lambda x: person_name in x if isinstance(x, list) else False
         )
-        return self.df[mask]
+        return df[mask]
     
-    def filter_by_date_range(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
+    def filter_by_date_range(self, start_date: Optional[str] = None, end_date: Optional[str] = None, current_user: Optional[str] = None) -> pd.DataFrame:
         """Filter by date range"""
-        if self.df is None or self.df.empty:
+        df = self._get_df_for_user(current_user)
+        if df.empty:
             return pd.DataFrame()
         
-        mask = pd.Series([True] * len(self.df))
+        mask = pd.Series([True] * len(df))
         
         if start_date:
-            mask &= self.df["date"] >= start_date
+            mask &= df["date"] >= start_date
         if end_date:
-            mask &= self.df["date"] <= end_date
+            mask &= df["date"] <= end_date
         
-        return self.df[mask]
+        return df[mask]
     
-    def filter_by_year_month(self, year: Optional[int] = None, month: Optional[int] = None) -> pd.DataFrame:
+    def filter_by_year_month(self, year: Optional[int] = None, month: Optional[int] = None, current_user: Optional[str] = None) -> pd.DataFrame:
         """Filter by year and/or month"""
-        if self.df is None or self.df.empty:
+        df = self._get_df_for_user(current_user)
+        if df.empty:
             return pd.DataFrame()
         
-        mask = pd.Series([True] * len(self.df))
+        mask = pd.Series([True] * len(df))
         
         if year:
-            mask &= self.df["year"] == year
+            mask &= df["year"] == year
         if month:
-            mask &= self.df["month"] == month
+            mask &= df["month"] == month
         
-        return self.df[mask]
+        return df[mask]
     
     def to_dict(self) -> List[Dict[str, Any]]:
         """Convert to list of dicts"""

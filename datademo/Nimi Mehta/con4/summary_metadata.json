@@ -1,0 +1,27 @@
+{
+  "meeting_id": "data004",
+  "datetime": "2024-04-14T00:00:00Z",
+  "participants": [
+    "Nimi Mehta",
+    "Host"
+  ],
+  "topics": [
+    "Early Career and First Setback (MTV Experience)",
+    "Persistence and Career Rebuilding",
+    "Transition to Entrepreneurship and Choosing Fear",
+    "Intuition, Body Awareness, and Decision-Making",
+    "Finding and Protecting One’s Voice",
+    "Balancing Kindness and Assertiveness",
+    "Confidence, Reflection, and Emotional Awareness"
+  ],
+  "actions": [
+    {
+      "action_id": "M004-A01",
+      "task": "Promote The Voice Layer Theory"
+    },
+    {
+      "action_id": "M004-A02",
+      "task": "Apply ‘Choose Your Discomfort’ Mindset"
+    }
+  ]
+}

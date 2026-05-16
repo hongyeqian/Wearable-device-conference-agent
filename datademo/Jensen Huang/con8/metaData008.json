@@ -1,0 +1,108 @@
+{
+  "meeting_id": "data008",
+  "title": "Conversation with Elon Musk and Jensen Huang on AI, Robotics, and AI Factories",
+  "datetime": null,
+  "duration_sec": 0,
+  "language": "en",
+  "source_url": null,
+  "meeting_type": "Fireside Chat",
+
+  "participants": [
+    {
+      "name": "Host",
+      "role": "Moderator of the session",
+      "aliases": ["Moderator"]
+    },
+    {
+      "name": "Elon Musk",
+      "role": "Founder of SpaceX and xAI; CEO of Tesla",
+      "aliases": ["EM", "Elon"]
+    },
+    {
+      "name": "Jensen Huang",
+      "role": "Founder and CEO of Nvidia",
+      "aliases": ["JH", "Jensen"]
+    }
+  ],
+
+  "organizations": [
+    "SpaceX",
+    "xAI",
+    "Tesla",
+    "Nvidia",
+    "Kingdom of Saudi Arabia",
+    "United States",
+    "Humane",
+    "AWS"
+  ],
+
+  "topics": [
+    "Reusability in space technology",
+    "Electric vehicles and robotics",
+    "Humanoid robot development",
+    "AI factories and generative computing",
+    "Future of work with AI and automation",
+    "Radiology transformation with AI",
+    "AI-enabled scientific breakthroughs",
+    "Energy and compute scaling in space",
+    "Digital twins and Omniverse",
+    "Global AI partnerships"
+  ],
+
+  "keywords": [
+    "Reusable rockets",
+    "Humanoid robots",
+    "AI factories",
+    "Generative computing",
+    "Retrieval-based computing",
+    "Accelerated computing",
+    "GPU supercomputers",
+    "Radiology AI",
+    "Omniverse",
+    "Digital twins",
+    "Solar-powered satellites",
+    "Kardashev scale",
+    "CRISPR",
+    "Grok",
+    "AI strategic partnership"
+  ],
+
+  "related_files": {
+    "transcript": "data008.md",
+    "meeting_summary": "meetLevel008.md",
+    "summary_embedding": "summary008.md"
+  },
+
+  "embedding_text_pointer": "summary008.md",
+
+  "summary_brief": "The discussion features Elon Musk and Jensen Huang exploring the future of AI, robotics, energy systems, and large-scale compute. They highlight the transition from retrieval-based computing to generative AI, the rise of humanoid robots, and the global need for AI factories. Broader topics include productivity, workforce changes, space-based compute, major US–Saudi AI partnerships, and emerging scientific and industrial applications enabled by advanced AI systems.",
+
+  "actions": [
+    {
+      "action_id": "M008-A01",
+      "task": "Advance development of the 500MW xAI–Saudi AI compute facility",
+      "assignee": {
+        "name": "Elon Musk",
+        "role": "Founder of xAI",
+        "aliases": ["EM", "Elon"]
+      },
+      "description_plain": "Continue coordinating with partners in the Kingdom of Saudi Arabia and Nvidia to build and deploy the planned 500-megawatt AI compute infrastructure, starting with the 50MW first phase.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "high"
+    },
+    {
+      "action_id": "M008-A02",
+      "task": "Expand Omniverse and digital twin collaborations with Humane",
+      "assignee": {
+        "name": "Jensen Huang",
+        "role": "CEO of Nvidia",
+        "aliases": ["JH", "Jensen"]
+      },
+      "description_plain": "Deepen work with Humane to apply Nvidia’s Omniverse platform to robotics, digital factories, and quantum simulation initiatives in Saudi Arabia.",
+      "due_date": "TBD",
+      "status": "open",
+      "priority": "medium"
+    }
+  ]
+}

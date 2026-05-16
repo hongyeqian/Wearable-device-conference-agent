@@ -1,0 +1,21 @@
+{
+  "meeting_id": "data008",
+  "datetime": null,
+  "participants": [
+    "Host",
+    "Elon Musk",
+    "Jensen Huang"
+  ],
+  "topics": [
+    "Opening Remarks and First-Order Thinking",
+    "Creation vs Disruption and Humanoid Robotics",
+    "AI Factories and Generative Computing",
+    "Robotics, Workforce, and the Future of Jobs",
+    "Productivity, Radiology, and Human Roles in an AI Era",
+    "Stories of Saudi Innovation and AI Acceleration",
+    "XAI and Humane Megawatt-Scale Announcements",
+    "AI in Space and Future Compute Scaling",
+    "Accelerated Computing and AI Bubble Question"
+  ],
+  "actions": []
+}

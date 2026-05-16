@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from google.adk.agents import LlmAgent
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.models import LiteLlm
-from config.settings import OPENAI_API_KEY, CURRENT_USER, DATA_DIR
+from config.settings import OPENAI_API_KEY, DATA_DIR
 from config.meeting_patterns import MEETING_AMBIGUITY_PATTERNS, EMBEDDING_THRESHOLD
 
 # Configure logging for query rewriter
@@ -25,7 +25,7 @@ sys.path.insert(0, str(project_root))
 # Import utilities
 import dateparser
 import numpy as np
-from sub_agents.pandas_utils import get_meetings_df
+from sub_agents.metadata_manager import get_meetings_metadata
 
 from sub_agents.date_resolver import DateResolver
 from sub_agents.person_matcher import get_person_matcher
@@ -174,6 +174,7 @@ def pandas_query(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     person_name: Optional[str] = None,
+    current_user: str = "",
 ) -> str:
     """
     Pandas query tool for resolving ambiguities
@@ -212,7 +213,7 @@ def pandas_query(
     # Increment counter
     _pandas_query_call_count += 1
     
-    mdf = get_meetings_df()
+    mdf = get_meetings_metadata(current_user)
     
     # Include call count in response for transparency
     call_info = {
@@ -269,8 +270,8 @@ def pandas_query(
         if not fuzzy_name:
             return json.dumps({"error": "fuzzy_name is required"})
         
-        df = mdf.filter_by_person(fuzzy_name)
-        meeting_ids = df["meeting_id"].tolist()
+        meetings = mdf.filter_by_person(fuzzy_name)
+        meeting_ids = [m["meeting_id"] for m in meetings]
         
         return json.dumps({
             "query_type": "filter_by_person",
@@ -280,11 +281,14 @@ def pandas_query(
         })
     
     elif query_type == "filter_by_date":
-        df_filtered = mdf.filter_by_year_month(
+        if year is None and month is None:
+            return json.dumps({"error": "At least one of year or month is required"})
+        
+        meetings = mdf.filter_by_year_month(
             year=year if year is not None else None,
             month=month if month is not None else None
         )
-        meeting_ids = df_filtered["meeting_id"].tolist()
+        meeting_ids = [m["meeting_id"] for m in meetings]
         
         return json.dumps({
             "query_type": "filter_by_date",
@@ -298,13 +302,13 @@ def pandas_query(
         if not start_date and not end_date:
             return json.dumps({"error": "At least one of start_date or end_date is required"})
         
-        # pandas_utils.filter_by_date_range accepts Optional[str]
-        df_filtered = mdf.filter_by_date_range(
+        # metadata_manager.filter_by_date_range accepts Optional[str]
+        meetings = mdf.filter_by_date_range(
             start_date=start_date, 
             end_date=end_date
         )
-        meeting_ids = df_filtered["meeting_id"].tolist()
-        dates = df_filtered["date"].tolist()
+        meeting_ids = [m["meeting_id"] for m in meetings]
+        dates = [m["date"] for m in meetings]
         
         return json.dumps({
             "query_type": "filter_by_date_range",
@@ -328,7 +332,7 @@ def pandas_query(
 
 
 
-def check_ambiguity(query: str) -> str:
+def check_ambiguity(query: str, current_user: str = "") -> str:
     """
     Check ambiguities in query using NLP libraries
     
@@ -337,6 +341,7 @@ def check_ambiguity(query: str) -> str:
     
     Args:
         query: User query
+        current_user: The authenticated user
     
     Returns:
         JSON formatted ambiguity check result
@@ -371,7 +376,7 @@ def check_ambiguity(query: str) -> str:
     
     # Person detection using PersonMatcher with pandas participants
     # This uses ListRecognizer for 100% accurate matching against actual meeting participants
-    matcher = get_person_matcher()
+    matcher = get_person_matcher(current_user)
     person_detection_result = matcher.detect_and_resolve(query)
     
     # Get detected and resolved person names
@@ -408,11 +413,11 @@ def check_ambiguity(query: str) -> str:
     })
 
 
-def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict[str, Any]:
+def resolve_entities(original_query: str, stage1_result: Dict[str, Any], current_user: str = "") -> Dict[str, Any]:
     """
     Stage 2: Resolution - Direct replacement (Option A)
     
-    1. First-person pronouns → Replace with CURRENT_USER
+    1. First-person pronouns → Replace with current_user
     2. Absolute time expressions → Parse to specific dates using dateparser
     3. Person names → Replace using person_mapping
     4. "last meeting" type ambiguous times → Pass through to Stage 3 as-is
@@ -420,6 +425,7 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
     Args:
         original_query: Original user query
         stage1_result: Detection result from Stage 1
+        current_user: The authenticated user
     
     Returns:
         Dictionary containing resolved_query, replacement_log, resolved_persons, resolved_times
@@ -438,10 +444,10 @@ def resolve_entities(original_query: str, stage1_result: Dict[str, Any]) -> Dict
     for term in person_terms:
         term_lower = term.lower()
         if term_lower in first_person:
-            replacement_log.append((term, CURRENT_USER))
-            resolved_persons.append(CURRENT_USER)  # Already resolved to "Hongye Qian" from settings
+            replacement_log.append((term, current_user))
+            resolved_persons.append(current_user)  # Resolved to dynamic user
             # Use word boundary to avoid replacing substrings
-            query = re.sub(r'\b' + re.escape(term) + r'\b', CURRENT_USER, query, flags=re.IGNORECASE)
+            query = re.sub(r'\b' + re.escape(term) + r'\b', current_user, query, flags=re.IGNORECASE)
     
     # 2. Handle time terms -> dateparser解析
     for term in time_terms:
@@ -490,7 +496,7 @@ _MEETING_REGEX_PATTERNS = [
 ]
 
 
-def resolve_by_regex(query: str, person_name: Optional[str] = None) -> Optional[RewriteOutput]:
+def resolve_by_regex(query: str, person_name: Optional[str] = None, current_user: str = "") -> Optional[RewriteOutput]:
     """
     Stage 3 - Layer 1: Regex-based resolution for standard meeting-time patterns.
     Directly calls pandas if a pattern matches, no LLM needed.
@@ -498,6 +504,7 @@ def resolve_by_regex(query: str, person_name: Optional[str] = None) -> Optional[
     Args:
         query: Resolved query from Stage 2
         person_name: Optional person name for filtering (from Stage 1)
+        current_user: The authenticated user
     
     Returns:
         RewriteOutput if matched, None if no regex match
@@ -509,7 +516,8 @@ def resolve_by_regex(query: str, person_name: Optional[str] = None) -> Optional[
             logger.info(f"[Stage3-Layer1-Regex] Matched pattern: '{match.group()}' → n={n}, person={person_name}")
             
             # Directly call pandas - no LLM needed
-            mdf = get_meetings_df()
+            from sub_agents.metadata_manager import get_meetings_metadata
+            mdf = get_meetings_metadata(current_user)
             meetings = mdf.get_last_n_meetings(n=n, person_name=person_name)
             meeting_ids = [m["meeting_id"] for m in meetings]
             dates = [m["date"] for m in meetings]
@@ -594,7 +602,7 @@ def _find_best_pattern_match(query: str) -> tuple[Optional[str], float]:
     return best_pattern, float(best_score)
 
 
-def resolve_by_embedding(query: str, person_name: Optional[str] = None) -> Optional[RewriteOutput]:
+def resolve_by_embedding(query: str, person_name: Optional[str] = None, current_user: str = "") -> Optional[RewriteOutput]:
     """
     Stage 3 - Layer 3: Embedding-based resolution for ambiguous meeting patterns.
     
@@ -605,6 +613,7 @@ def resolve_by_embedding(query: str, person_name: Optional[str] = None) -> Optio
     Args:
         query: The rewritten query after Stage 1/2 (may still have meeting ambiguity)
         person_name: Optional person name for filtering
+        current_user: The authenticated user
         
     Returns:
         RewriteOutput with resolved query and meeting IDs, or None if failed
@@ -623,7 +632,8 @@ def resolve_by_embedding(query: str, person_name: Optional[str] = None) -> Optio
     logger.info(f"[Stage3-Layer3-Embedding] Matched pattern: '{best_pattern}' (similarity={similarity:.3f}), n={n}")
     
     # Step 3: Call pandas to get meetings
-    mdf = get_meetings_df()
+    from sub_agents.metadata_manager import get_meetings_metadata
+    mdf = get_meetings_metadata(current_user)
     meetings = mdf.get_last_n_meetings(n=n, person_name=person_name)
     
     if not meetings:
@@ -662,7 +672,8 @@ reset_counter_tool = FunctionTool(func=reset_counter)
 
 def merge_all_meeting_ids(
     stage2_result: Dict[str, Any],
-    stage3_meeting_ids: List[str]
+    stage3_meeting_ids: List[str],
+    current_user: str = ""
 ) -> List[str]:
     """
     Final unified processing: collect resolved persons/times from Stage 2,
@@ -675,24 +686,23 @@ def merge_all_meeting_ids(
     Returns:
         Merged list of meeting IDs
     """
-    from sub_agents.pandas_utils import get_meetings_df
-    
     all_meeting_ids = set(stage3_meeting_ids)
-    mdf = get_meetings_df()
+    from sub_agents.metadata_manager import get_meetings_metadata
+    mdf = get_meetings_metadata(current_user)
     
     # 1. Query by resolved person names
     resolved_persons = stage2_result.get('resolved_persons', [])
     for person in resolved_persons:
-        df = mdf.filter_by_person(person)
-        person_meeting_ids = df["meeting_id"].tolist()
+        meetings = mdf.filter_by_person(person)
+        person_meeting_ids = [m["meeting_id"] for m in meetings]
         all_meeting_ids.update(person_meeting_ids)
         logger.info(f"[Merge] Added {len(person_meeting_ids)} meetings for person: {person}")
     
     # 2. Query by resolved time strings
     resolved_times = stage2_result.get('resolved_times', [])
     for date_str in resolved_times:
-        df_filtered = mdf.filter_by_date_range(start_date=date_str, end_date=date_str)
-        time_meeting_ids = df_filtered["meeting_id"].tolist()
+        meetings = mdf.filter_by_date_range(start_date=date_str, end_date=date_str)
+        time_meeting_ids = [m["meeting_id"] for m in meetings]
         all_meeting_ids.update(time_meeting_ids)
         logger.info(f"[Merge] Added {len(time_meeting_ids)} meetings for time: {date_str}")
     
@@ -700,7 +710,7 @@ def merge_all_meeting_ids(
     return list(all_meeting_ids)
 
 
-async def rewrite_query_async(query: str) -> RewriteOutput:
+async def rewrite_query_async(query: str, current_user: str = "") -> RewriteOutput:
     """
     Three-stage Query Rewriter Pipeline (Async Entry)
     
@@ -711,19 +721,20 @@ async def rewrite_query_async(query: str) -> RewriteOutput:
     
     Args:
         query: Original user query
+        current_user: Authenticated user name
         
     Returns:
         RewriteOutput with rewritten_query and relevant_meeting_ids
     """
-    logger.info(f"[QueryRewriter] Input query: '{query}'")
+    logger.info(f"[QueryRewriter] Input query: '{query}', User: '{current_user}'")
     
     # ===== Stage 1: Detection (Synchronous) =====
-    stage1_result_json = check_ambiguity(query)
+    stage1_result_json = check_ambiguity(query, current_user)
     stage1_result = json.loads(stage1_result_json)
     logger.info(f"[Stage1-Detection] time={stage1_result.get('time_terms')}, person={stage1_result.get('person_terms')}")
     
     # ===== Stage 2: Resolution (Synchronous) =====
-    stage2_result = resolve_entities(query, stage1_result)
+    stage2_result = resolve_entities(query, stage1_result, current_user)
     resolved_query = stage2_result['resolved_query']
     logger.info(f"[Stage2-Resolution] Resolved: '{resolved_query}', log={stage2_result.get('replacement_log')}")
     
@@ -733,7 +744,7 @@ async def rewrite_query_async(query: str) -> RewriteOutput:
     
     # ===== Stage 3: Pipeline resolution (Regex → Embedding threshold check → Embedding if needed) =====
     # Layer 1: Regex - Try to resolve specific meeting patterns
-    regex_result = resolve_by_regex(resolved_query, person_name)
+    regex_result = resolve_by_regex(resolved_query, person_name, current_user)
     
     # Use regex result if available, otherwise use resolved_query
     base_query = regex_result.rewritten_query if regex_result else resolved_query
@@ -745,7 +756,7 @@ async def rewrite_query_async(query: str) -> RewriteOutput:
         # Layer 3: Threshold met - need embedding resolution
         logger.info(f"[Stage3] Layer 2 threshold met, triggering Layer 3 embedding resolution")
         
-        embedding_result = resolve_by_embedding(base_query, person_name)
+        embedding_result = resolve_by_embedding(base_query, person_name, current_user)
         
         if embedding_result:
             stage3_meeting_ids = embedding_result.relevant_meeting_ids
@@ -763,7 +774,7 @@ async def rewrite_query_async(query: str) -> RewriteOutput:
         logger.info(f"[Stage3] Layer 2 confirms clean, no embedding needed")
     
     # ===== Final: Merge Stage 2/3 meeting IDs =====
-    final_meeting_ids = merge_all_meeting_ids(stage2_result, stage3_meeting_ids)
+    final_meeting_ids = merge_all_meeting_ids(stage2_result, stage3_meeting_ids, current_user)
     
     return RewriteOutput(
         rewritten_query=rewritten_query,
@@ -785,9 +796,8 @@ def warmup_all():
 
     logger.info("[Warmup] Pre-loading NLP components...")
 
-    # 1. pandas MeetingsDataFrame
-    logger.info("[Warmup]  Loading MeetingsDataFrame...")
-    get_meetings_df()
+    # 1. MeetingsMetadataManager (Lazy loaded per user, skip global warmup)
+    logger.info("[Warmup]  Skipping MeetingsMetadataManager global warmup (loaded per user)...")
 
     # 2. PersonMatcher singleton + Presidio AnalyzerEngine
     logger.info("[Warmup]  Loading PersonMatcher + Presidio AnalyzerEngine...")

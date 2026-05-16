@@ -21,6 +21,8 @@ else:
 DATA_DIR = PROJECT_ROOT / "datademo"
 VECTOR_STORE_DIR = PROJECT_ROOT / "vector_store"
 # write future path here
+DB_PATH = PROJECT_ROOT / "database.sqlite"
+
 # API keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 #print(OPENAI_API_KEY)
@@ -51,7 +53,7 @@ ELASTICSEARCH_VERIFY_CERTS = os.getenv("ELASTICSEARCH_VERIFY_CERTS", "true").low
 ELASTICSEARCH_CA_CERTS = os.getenv("ELASTICSEARCH_CA_CERTS", None)  # Path to CA certificate if needed
 ELASTICSEARCH_TIMEOUT = int(os.getenv("ELASTICSEARCH_TIMEOUT", "30"))  # Request timeout in seconds
 
-CURRENT_USER = "Hongye Qian"
+DEFAULT_USER = "Elon Musk"
 
 
 
@@ -77,7 +79,8 @@ def set_shared_session_service(service):
 # Canonical initial state for a new turn session. Orchestrator should copy and fill runtime fields.
 TURN_SESSION_INITIAL_STATE = {
     "user_query": "",
-    "CURRENT_USER": "Hongye Qian",
+    "CURRENT_USER": "",
+    "allowed_meeting_ids": [],
     "meeting_catalog": "",
     "now_str": "",
     "turn_memory": [],

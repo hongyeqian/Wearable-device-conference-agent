@@ -56,20 +56,24 @@ logger = logging.getLogger(__name__)
 # Constants
 # ============================
 
+CURRENT_MODE = "train" # Can be updated to "test" via CLI
+
 PERSONAS_FILE = Path(__file__).parent.parent / "personas" / "user_personas.json"
 OUTPUT_DIR = Path(__file__).parent.parent / "data"
 
-# Fixed system prompt — identical for every training sample
+# Fixed system prompt — identical for every training sample.
+# CRITICAL: always output the FULL schema skeleton. Empty fields use {} or [].
 SYSTEM_PROMPT = (
     "You are a preference extraction model for a meeting assistant. "
     "Given new evidence about a user and their current preference profile, "
     "output the updated preference profile as JSON. "
     "Preserve all existing preferences unless directly contradicted by new evidence. "
-    "Only output valid JSON conforming to this schema: "
+    "Always output valid JSON with ALL fields present conforming to this schema: "
     '{"communication_style": {"language": str, "length": str, "format": str, "tone": str}, '
     '"scheduling": {"preferred_times": [str], "unavailable_times": [str]}, '
     '"focus_areas": [str]}. '
-    "Omit fields that have no evidence yet."
+    "Use empty strings, empty objects {}, or empty arrays [] for fields with no evidence yet. "
+    "Never omit any top-level or nested field from the schema."
 )
 
 # Scenario definitions: 4 categories with target ratios
@@ -116,96 +120,127 @@ def load_personas() -> List[Dict[str, Any]]:
 
 # Each key is (field_type, scenario). Instructions tell GPT-4o-mini exactly
 # what current_preferences + evidence + updated_preferences should look like.
-# CRITICAL: updated_preferences must always be the FULL profile after the update.
+# CRITICAL: Both current and updated must ALWAYS contain the full schema skeleton.
+#   Empty fields are represented as {} or [] — never omitted.
+_FULL_SKELETON_NOTE = (
+    "\n\nIMPORTANT: Both current_preferences and updated_preferences must ALWAYS "
+    "contain ALL 3 top-level keys (communication_style, scheduling, focus_areas) "
+    "with their complete sub-field structure. "
+    "Use empty strings, empty objects {{}}, or empty arrays [] for fields with no data. "
+    "Example empty skeleton:\n"
+    '{{"communication_style": {{"language": "", "length": "", "format": "", "tone": ""}}, '
+    '"scheduling": {{"preferred_times": [], "unavailable_times": []}}, '
+    '"focus_areas": []}}'
+)
+
 _SCENARIO_FIELD_INSTRUCTIONS: Dict[Tuple[str, str], str] = {
     # ---- communication_style × 4 scenarios ----
     ("communication_style", "empty"): (
-        "The current_preferences is EMPTY ({{}}).\n"
+        "The current_preferences uses the FULL skeleton with ALL fields empty.\n"
         "The new_evidence should be a user conversation or meeting statement that reveals "
         "the user's COMMUNICATION STYLE preferences (language, length, format, or tone).\n"
-        "The updated_preferences should be the COMPLETE profile after extraction — "
-        "containing only a communication_style object with the fields found in the evidence."
+        "The updated_preferences must use the FULL skeleton — "
+        "fill in the communication_style fields found in the evidence, "
+        "keep scheduling and focus_areas empty."
+        + _FULL_SKELETON_NOTE
     ),
     ("communication_style", "incr"): (
-        "The current_preferences already has 1-2 fields filled "
-        "(e.g., scheduling or focus_areas, or a partial communication_style).\n"
+        "The current_preferences uses the FULL skeleton with some fields filled "
+        "(e.g., scheduling or focus_areas have values, "
+        "but communication_style sub-fields are mostly empty).\n"
         "The new_evidence should reveal NEW communication style information "
         "(preferred language, response length, format, or tone).\n"
-        "The updated_preferences must be the COMPLETE profile — "
-        "preserving ALL existing fields AND adding/enriching the communication_style field."
+        "The updated_preferences must use the FULL skeleton — "
+        "preserve ALL existing values AND fill in the new communication_style fields."
+        + _FULL_SKELETON_NOTE
     ),
     ("communication_style", "override"): (
-        "The current_preferences has a communication_style field with specific values.\n"
-        "The new_evidence should CONTRADICT one of those values. For example:\n"
-        "  - Current says format='bullet_points', user now says 'give me detailed paragraphs'\n"
-        "  - Current says tone='formal', user says 'let's keep it casual'\n"
-        "The updated_preferences must be the COMPLETE profile — "
-        "with the contradicted sub-field updated, all other fields preserved as-is."
+        "The current_preferences uses the FULL skeleton with communication_style filled.\n"
+        "The new_evidence should CONTRADICT one communication_style value. For example:\n"
+        "  - Current format='bullet_points', user says 'give me detailed paragraphs'\n"
+        "  - Current tone='formal', user says 'let's keep it casual'\n"
+        "The updated_preferences must use the FULL skeleton — "
+        "update the contradicted sub-field, preserve everything else as-is."
+        + _FULL_SKELETON_NOTE
     ),
     ("communication_style", "nochange"): (
-        "The current_preferences has some fields filled (including communication_style).\n"
-        "The new_evidence is a NORMAL conversation that does NOT contain any preference signals.\n"
-        "Examples: 'What was discussed in the last meeting?', 'Can you summarize the Q3 report?'\n"
+        "The current_preferences uses the FULL skeleton with some fields filled "
+        "(including communication_style).\n"
+        "The new_evidence is a NORMAL conversation with NO preference signals.\n"
+        "Examples: 'What was discussed in the last meeting?', 'Summarize the Q3 report'\n"
         "The updated_preferences must be IDENTICAL to the current_preferences — "
-        "copy the entire current profile unchanged."
+        "copy every field unchanged."
+        + _FULL_SKELETON_NOTE
     ),
     # ---- scheduling × 4 scenarios ----
     ("scheduling", "empty"): (
-        "The current_preferences is EMPTY ({{}}).\n"
+        "The current_preferences uses the FULL skeleton with ALL fields empty.\n"
         "The new_evidence should reveal the user's SCHEDULING preferences "
         "(preferred meeting times or unavailable times).\n"
-        "The updated_preferences should be the COMPLETE profile — "
-        "containing only a scheduling object."
+        "The updated_preferences must use the FULL skeleton — "
+        "fill in the scheduling fields, keep communication_style and focus_areas empty."
+        + _FULL_SKELETON_NOTE
     ),
     ("scheduling", "incr"): (
-        "The current_preferences already has 1-2 fields filled "
-        "(e.g., communication_style or focus_areas, or a partial scheduling).\n"
+        "The current_preferences uses the FULL skeleton with some fields filled "
+        "(e.g., communication_style or focus_areas have values, "
+        "but scheduling is partially filled or empty).\n"
         "The new_evidence should reveal NEW scheduling information.\n"
-        "The updated_preferences must be the COMPLETE profile — "
-        "preserving ALL existing fields AND adding/enriching the scheduling field."
+        "The updated_preferences must use the FULL skeleton — "
+        "preserve ALL existing values AND add/enrich the scheduling fields."
+        + _FULL_SKELETON_NOTE
     ),
     ("scheduling", "override"): (
-        "The current_preferences has a scheduling field.\n"
+        "The current_preferences uses the FULL skeleton with scheduling filled.\n"
         "The new_evidence should CONTRADICT one scheduling value. For example:\n"
-        "  - Current says unavailable_times includes 'Friday', user says 'this Friday works'\n"
-        "  - Current says preferred mornings, user says 'switch to afternoons'\n"
-        "The updated_preferences must be the COMPLETE profile — "
-        "with the contradicted field updated, all others preserved."
+        "  - unavailable_times includes 'Friday', user says 'this Friday works'\n"
+        "  - preferred mornings, user says 'switch to afternoons'\n"
+        "The updated_preferences must use the FULL skeleton — "
+        "update the contradicted scheduling field, preserve everything else."
+        + _FULL_SKELETON_NOTE
     ),
     ("scheduling", "nochange"): (
-        "The current_preferences has some fields filled (including scheduling).\n"
+        "The current_preferences uses the FULL skeleton with some fields filled "
+        "(including scheduling).\n"
         "The new_evidence is a NORMAL conversation with NO preference signals.\n"
-        "Examples: 'Show me the action items from last week', 'Who attended the sprint review?'\n"
+        "Examples: 'Show me the action items', 'Who attended the sprint review?'\n"
         "The updated_preferences must be IDENTICAL to the current_preferences."
+        + _FULL_SKELETON_NOTE
     ),
     # ---- focus_areas × 4 scenarios ----
     ("focus_areas", "empty"): (
-        "The current_preferences is EMPTY ({{}}).\n"
+        "The current_preferences uses the FULL skeleton with ALL fields empty.\n"
         "The new_evidence should reveal what content the user wants to FOCUS on "
         "(action_items, decisions, technical_details, or all).\n"
-        "The updated_preferences should be the COMPLETE profile — "
-        "containing only a focus_areas array."
+        "The updated_preferences must use the FULL skeleton — "
+        "fill in focus_areas, keep communication_style and scheduling empty."
+        + _FULL_SKELETON_NOTE
     ),
     ("focus_areas", "incr"): (
-        "The current_preferences already has 1-2 fields filled "
-        "(e.g., communication_style or scheduling, or focus_areas with only 1 item).\n"
+        "The current_preferences uses the FULL skeleton with some fields filled "
+        "(e.g., communication_style or scheduling have values, "
+        "but focus_areas is empty or has only 1 item).\n"
         "The new_evidence should reveal NEW focus area preferences.\n"
-        "The updated_preferences must be the COMPLETE profile — "
-        "preserving ALL existing fields AND adding/enriching focus_areas."
+        "The updated_preferences must use the FULL skeleton — "
+        "preserve ALL existing values AND add/enrich focus_areas."
+        + _FULL_SKELETON_NOTE
     ),
     ("focus_areas", "override"): (
-        "The current_preferences has a focus_areas field.\n"
+        "The current_preferences uses the FULL skeleton with focus_areas filled.\n"
         "The new_evidence should CHANGE the user's focus. For example:\n"
-        "  - Current says focus_areas=['action_items'], user says 'skip action items, "
+        "  - focus_areas=['action_items'], user says 'skip action items, "
         "I need technical details'\n"
-        "The updated_preferences must be the COMPLETE profile — "
-        "with focus_areas replaced, all other fields preserved."
+        "The updated_preferences must use the FULL skeleton — "
+        "replace focus_areas, preserve all other fields."
+        + _FULL_SKELETON_NOTE
     ),
     ("focus_areas", "nochange"): (
-        "The current_preferences has some fields filled (including focus_areas).\n"
+        "The current_preferences uses the FULL skeleton with some fields filled "
+        "(including focus_areas).\n"
         "The new_evidence is a NORMAL conversation with NO preference signals.\n"
         "Examples: 'What did Bob say about the API?', 'When is the next deadline?'\n"
         "The updated_preferences must be IDENTICAL to the current_preferences."
+        + _FULL_SKELETON_NOTE
     ),
 }
 
@@ -213,14 +248,24 @@ _SCENARIO_FIELD_INSTRUCTIONS: Dict[Tuple[str, str], str] = {
 def build_meta_prompt(persona: Dict[str, Any], field_type: str, scenario: str) -> str:
     """
     Build the meta-prompt that instructs GPT-4o-mini to generate one training sample.
-
-    The prompt specifies the user persona, target field, scenario, and critically
-    requires the FULL profile as output (not just the delta).
     """
     instruction = _SCENARIO_FIELD_INSTRUCTIONS[(field_type, scenario)]
+    
+    test_mode_str = ""
+    if CURRENT_MODE == "test":
+        test_mode_str = (
+            "\n## TEST SET DIVERSITY REQUIREMENT\n"
+            "CRITICAL: You are generating a TEST set to evaluate an AI's semantic parsing. "
+            "You MUST use extremely diverse, idiomatic, obscure, or highly conversational "
+            "natural language for the new_evidence. \n"
+            "Do NOT use simple declarations like 'I prefer concise'. "
+            "Instead use slang, passive aggression, implicit hints, corporate jargon, tangents, "
+            "or very complex sentences to truly test the extraction capability. "
+            "Invent highly out-of-distribution persona traits if needed!\n"
+        )
 
     return f"""Generate exactly 1 training sample for a preference extraction model.
-
+{test_mode_str}
 ## User Persona (use this for realistic evidence)
 - Name: {persona['name']}
 - Role: {persona['role']}
@@ -231,20 +276,30 @@ def build_meta_prompt(persona: Dict[str, Any], field_type: str, scenario: str) -
 - Preferred times: {json.dumps(persona['preferred_meeting_times'])}
 - Unavailable: {json.dumps(persona['unavailable_times'])}
 
-## Preference Schema
+## Preference Schema (ALL fields must ALWAYS be present)
 ```json
 {{
   "communication_style": {{
-    "language": "en | zh-CN | zh-en-mixed",
-    "length": "concise | moderate | detailed",
-    "format": "bullet_points | paragraphs | tables | structured_sections",
-    "tone": "professional | casual | academic | formal"
+    "language": "en | zh-CN | zh-en-mixed | (empty string if unknown)",
+    "length": "concise | moderate | detailed | (empty string if unknown)",
+    "format": "bullet_points | paragraphs | tables | structured_sections | (empty string if unknown)",
+    "tone": "professional | casual | academic | formal | (empty string if unknown)"
   }},
   "scheduling": {{
-    "preferred_times": ["Tuesday morning 9-12", "weekday afternoons 14-17"],
-    "unavailable_times": ["Friday all day", "Monday before 10:00"]
+    "preferred_times": ["Tuesday morning 9-12"],
+    "unavailable_times": ["Friday all day"]
   }},
   "focus_areas": ["action_items", "decisions", "technical_details", "all"]
+}}
+```
+STRICT ENUM WARNING: For `focus_areas`, you MUST ONLY use the EXACT strings provided above (`action_items`, `decisions`, `technical_details`, `all`). Do NOT invent new string values like `user_experience`.
+
+## Empty Skeleton (use this when a field has no data)
+```json
+{{
+  "communication_style": {{"language": "", "length": "", "format": "", "tone": ""}},
+  "scheduling": {{"preferred_times": [], "unavailable_times": []}},
+  "focus_areas": []
 }}
 ```
 
@@ -260,16 +315,18 @@ def build_meta_prompt(persona: Dict[str, Any], field_type: str, scenario: str) -
 Return a JSON object with exactly 3 fields:
 ```json
 {{
-  "current_preferences": {{ ... or empty {{}} }},
-  "new_evidence": "User: I prefer bullet points.\\nAssistant: Noted.",
-  "updated_preferences": {{ ... COMPLETE profile after update ... }}
+  "current_preferences": {{ FULL skeleton, empty or filled }},
+  "new_evidence": "<Text matching the required scenario>",
+  "updated_preferences": {{ FULL skeleton after update }}
 }}
 ```
 
 IMPORTANT:
 - Make the evidence natural and conversational, not robotic
 - Only output valid JSON, no markdown
-- updated_preferences must be the COMPLETE profile after the update, not just the delta
+- BOTH current_preferences and updated_preferences must contain ALL 3 top-level keys
+  with their complete sub-field structure. Never omit any field.
+- Use empty strings (""), empty objects {{}}, or empty arrays [] for unknown fields
 - For nochange scenario, updated_preferences must be identical to current_preferences
 """
 
@@ -359,6 +416,16 @@ async def generate_one_sample(
             logger.warning(f"  [{sample_id}] Empty evidence, skipping")
             return None
 
+        # Validate schema completeness: both must have all 3 top-level keys
+        required_keys = {"communication_style", "scheduling", "focus_areas"}
+        for label, obj in [("current", current), ("updated", updated)]:
+            missing = required_keys - set(obj.keys())
+            if missing:
+                logger.warning(
+                    f"  [{sample_id}] {label} missing keys {missing}, skipping"
+                )
+                return None
+
         # Validate that updated_preferences is serializable
         json.dumps(updated, ensure_ascii=False)
 
@@ -420,25 +487,36 @@ def _flatten_prefs(prefs: Dict[str, Any], prefix: str = "") -> List[str]:
     """
     Flatten a nested preference dict into human-readable bullet strings.
 
+    Displays empty values explicitly so reviewers can see the full skeleton.
     Example:
-        {"communication_style": {"language": "en"}, "focus_areas": ["action_items"]}
+        {"communication_style": {"language": "en", "length": ""}, "focus_areas": []}
         →
-        ["communication_style.language: en", "focus_areas: action_items"]
+        ["communication_style.language: en", "communication_style.length: (empty)",
+         "focus_areas: (empty)"]
     """
-    if not prefs:
-        return ["(empty)"]
-
     lines = []
     for key, value in prefs.items():
         full_key = f"{prefix}{key}" if not prefix else f"{prefix}.{key}"
 
         if isinstance(value, dict):
-            lines.extend(_flatten_prefs(value, full_key))
+            if not value:
+                # Empty dict — e.g. communication_style: {}
+                lines.append(f"{full_key}: (empty)")
+            else:
+                lines.extend(_flatten_prefs(value, full_key))
         elif isinstance(value, list):
-            items = ", ".join(str(v) for v in value)
-            lines.append(f"{full_key}: {items}")
+            if not value:
+                lines.append(f"{full_key}: (empty)")
+            else:
+                items = ", ".join(str(v) for v in value)
+                lines.append(f"{full_key}: {items}")
+        elif value == "" or value is None:
+            lines.append(f"{full_key}: (empty)")
         else:
             lines.append(f"{full_key}: {value}")
+
+    if not lines:
+        return ["(no fields)"]
 
     return lines
 
@@ -525,20 +603,18 @@ def generate_review_markdown(samples: List[Dict[str, Any]], field_type: str) -> 
 
 def save_field_data(field_type: str, samples: List[Dict[str, Any]]) -> None:
     """
-    Save samples for one field type as both JSONL (training) and MD (review).
-
-    JSONL is the source of truth. MD is a read-only human-readable view.
+    Save samples for one field type as both JSONL (training/test) and MD (review).
     """
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # JSONL for training (source of truth)
-    jsonl_path = OUTPUT_DIR / f"{field_type}_train.jsonl"
+    jsonl_path = OUTPUT_DIR / f"{field_type}_{CURRENT_MODE}.jsonl"
     with open(jsonl_path, "w", encoding="utf-8") as f:
         for sample in samples:
             f.write(json.dumps(sample, ensure_ascii=False) + "\n")
 
     # Markdown for human review (read-only view)
-    md_path = OUTPUT_DIR / f"{field_type}_review.md"
+    md_path = OUTPUT_DIR / f"{field_type}_{CURRENT_MODE}_review.md"
     md_content = generate_review_markdown(samples, field_type)
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(md_content)
@@ -603,11 +679,11 @@ async def generate_field_data(
 # ============================
 
 def merge_all_files() -> None:
-    """Merge all field-type JSONL files into combined_train.jsonl."""
+    """Merge all field-type JSONL files into combined.jsonl."""
     all_samples: List[Dict[str, Any]] = []
 
     for field_type in FIELD_TYPES:
-        jsonl_path = OUTPUT_DIR / f"{field_type}_train.jsonl"
+        jsonl_path = OUTPUT_DIR / f"{field_type}_{CURRENT_MODE}.jsonl"
         if not jsonl_path.exists():
             logger.warning(f"  Missing {jsonl_path.name}, skipping")
             continue
@@ -626,7 +702,7 @@ def merge_all_files() -> None:
 
     random.shuffle(all_samples)
 
-    combined_jsonl = OUTPUT_DIR / "combined_train.jsonl"
+    combined_jsonl = OUTPUT_DIR / f"combined_{CURRENT_MODE}.jsonl"
     with open(combined_jsonl, "w", encoding="utf-8") as f:
         for sample in all_samples:
             f.write(json.dumps(sample, ensure_ascii=False) + "\n")
@@ -703,6 +779,10 @@ async def main() -> None:
         description="Generate Preference Adapter training data"
     )
     parser.add_argument(
+        "--mode", type=str, choices=["train", "test"], default="train",
+        help="Mode to run the generator in. 'test' generates overly complex evidence.",
+    )
+    parser.add_argument(
         "--count", type=int, default=200,
         help="Total samples to generate (default: 200)",
     )
@@ -712,13 +792,16 @@ async def main() -> None:
     )
     parser.add_argument(
         "--merge", action="store_true",
-        help="Merge field-type files into combined_train.jsonl",
+        help="Merge field-type files into combined.jsonl based on mode",
     )
     parser.add_argument(
         "--validate", type=str, metavar="FILE",
         help="Validate an existing JSONL file",
     )
     args = parser.parse_args()
+
+    global CURRENT_MODE
+    CURRENT_MODE = args.mode
 
     # --- Merge mode ---
     if args.merge:
@@ -755,7 +838,7 @@ async def main() -> None:
             save_field_data(field_type, samples)
 
             # Validate immediately after saving
-            jsonl_path = OUTPUT_DIR / f"{field_type}_train.jsonl"
+            jsonl_path = OUTPUT_DIR / f"{field_type}_{CURRENT_MODE}.jsonl"
             stats = validate_file(jsonl_path)
             logger.info(
                 f"  Validation: {stats['valid']}/{stats['total']} valid, "

@@ -1,0 +1,31 @@
+{
+  "meeting_id": "data013",
+  "datetime": "2025-11-30T14:36:00+08:00",
+  "participants": [
+    "Ankit",
+    "Hongye Qian"
+  ],
+  "topics": [
+    "Summary Architecture Discussion",
+    "Metadata and Summarization",
+    "Semantic Normalization",
+    "Architecture Design and Implementation"
+  ],
+  "actions": [
+    {
+      "action_id": "M013-A01",
+      "task": "Hongye Qian to Begin with Second Architecture Design",
+      "assignee": "Hongye Qian"
+    },
+    {
+      "action_id": "M013-A02",
+      "task": "Ankit to Prepare Detailed System Diagram",
+      "assignee": "Ankit"
+    },
+    {
+      "action_id": "M013-A03",
+      "task": "Ankit to Develop Basic Chat Interface",
+      "assignee": "Ankit"
+    }
+  ]
+}

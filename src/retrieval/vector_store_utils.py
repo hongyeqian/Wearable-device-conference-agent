@@ -87,7 +87,7 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
             self.doc_mapping[level] = {}
             self.doc_text_tokenized[level] = []
             
-            print(f"✅ Cleared all indices for {level} level")
+            print(f"SUCCESS: Cleared all indices for {level} level")
         else:
             # Clear all levels
             self.faiss_indices.clear()
@@ -95,7 +95,7 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
             for level_key in ['metadata', 'summary', 'meeting']:
                 self.doc_mapping[level_key] = {}
                 self.doc_text_tokenized[level_key] = []
-            print("✅ Cleared all indices for all levels")
+            print("SUCCESS: Cleared all indices for all levels")
     
     def save(self, save_dir: Path):
         """
@@ -116,7 +116,7 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
         for level, index in self.faiss_indices.items():
             faiss_file = faiss_dir / f"{level}.index"
             faiss.write_index(index, str(faiss_file))
-            print(f"  ✅ Saved FAISS index for {level} level")
+            print(f"  SUCCESS: Saved FAISS index for {level} level")
         
         # Save BM25 indices, doc_mapping, and doc_text_tokenized using pickle
         pickle_dir = save_dir / "pickle"
@@ -126,31 +126,31 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
         bm25_file = pickle_dir / "bm25_indices.pkl"
         with open(bm25_file, 'wb') as f:
             pickle.dump(self.bm25_indices, f)
-        print(f"  ✅ Saved BM25 indices")
+        print(f"  SUCCESS: Saved BM25 indices")
         
         # Save doc_mapping
         mapping_file = pickle_dir / "doc_mapping.pkl"
         with open(mapping_file, 'wb') as f:
             pickle.dump(self.doc_mapping, f)
-        print(f"  ✅ Saved doc_mapping")
+        print(f"  SUCCESS: Saved doc_mapping")
         
         # Save doc_text_tokenized
         tokenized_file = pickle_dir / "doc_text_tokenized.pkl"
         with open(tokenized_file, 'wb') as f:
             pickle.dump(self.doc_text_tokenized, f)
-        print(f"  ✅ Saved doc_text_tokenized")
+        print(f"  SUCCESS: Saved doc_text_tokenized")
 
         # Save meeting_id_to_summary_indices
         meeting_indices_file = pickle_dir / "meeting_id_to_summary_indices.pkl"
         with open(meeting_indices_file, 'wb') as f:
             pickle.dump(self.meeting_id_to_summary_indices, f)
-        print(f"  ✅ Saved meeting_id_to_summary_indices")
+        print(f"  SUCCESS: Saved meeting_id_to_summary_indices")
 
         # Save entry_id_to_meeting_indices
         entry_indices_file = pickle_dir / "entry_id_to_meeting_indices.pkl"
         with open(entry_indices_file, 'wb') as f:
             pickle.dump(self.entry_id_to_meeting_indices, f)
-        print(f"  ✅ Saved entry_id_to_meeting_indices")
+        print(f"  SUCCESS: Saved entry_id_to_meeting_indices")
         
         # Save metadata (alpha, embedding_dim)
         metadata_file = pickle_dir / "metadata.pkl"
@@ -163,9 +163,9 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
         }
         with open(metadata_file, 'wb') as f:
             pickle.dump(metadata, f)
-        print(f"  ✅ Saved metadata")
+        print(f"  SUCCESS: Saved metadata")
         
-        print(f"✅ Successfully saved all indices to {save_dir}")
+        print(f"SUCCESS: Successfully saved all indices to {save_dir}")
     
     @classmethod
     def load(cls, save_dir: Path, embedding_generator=None):
@@ -214,11 +214,11 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
         # Load faiss_nlist and faiss_nprobe from metadata
         if 'faiss_nlist' in metadata:
             instance.faiss_nlist = metadata['faiss_nlist']
-            print(f"  ✅ Loaded faiss_nlist: {instance.faiss_nlist}")
+            print(f"  SUCCESS: Loaded faiss_nlist: {instance.faiss_nlist}")
         
         if 'faiss_nprobe' in metadata:
             instance.faiss_nprobe = metadata['faiss_nprobe']
-            print(f"  ✅ Loaded faiss_nprobe: {instance.faiss_nprobe}")
+            print(f"  SUCCESS: Loaded faiss_nprobe: {instance.faiss_nprobe}")
         
         # Load FAISS indices
         faiss_dir = save_dir / "faiss"
@@ -228,7 +228,7 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
                 if faiss_file.exists():
                     index = faiss.read_index(str(faiss_file))
                     instance.faiss_indices[level] = index
-                    print(f"  ✅ Loaded FAISS index for {level} level ({index.ntotal} vectors)")
+                    print(f"  SUCCESS: Loaded FAISS index for {level} level ({index.ntotal} vectors)")
         
         # Load BM25 indices, doc_mapping, and doc_text_tokenized
         pickle_dir = save_dir / "pickle"
@@ -238,7 +238,7 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
         if bm25_file.exists():
             with open(bm25_file, 'rb') as f:
                 instance.bm25_indices = pickle.load(f)
-            print(f"  ✅ Loaded BM25 indices for {len(instance.bm25_indices)} levels")
+            print(f"  SUCCESS: Loaded BM25 indices for {len(instance.bm25_indices)} levels")
         
         # Load doc_mapping
         mapping_file = pickle_dir / "doc_mapping.pkl"
@@ -246,7 +246,7 @@ class VectorStoreUtilsMixin(HybridSearchVectorStore):
             with open(mapping_file, 'rb') as f:
                 instance.doc_mapping = pickle.load(f)
             total_docs = sum(len(mapping) for mapping in instance.doc_mapping.values())
-            print(f"  ✅ Loaded doc_mapping ({total_docs} total documents)")
+            print(f"  SUCCESS: Loaded doc_mapping ({total_docs} total documents)")
         
         # Load doc_text_tokenized
         tokenized_file = pickle_dir / "doc_text_tokenized.pkl"

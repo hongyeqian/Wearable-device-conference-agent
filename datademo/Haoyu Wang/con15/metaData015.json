@@ -1,0 +1,89 @@
+{
+  "meeting_id": "data015",
+  "title": "Career Strategy Session — How to Land Big Tech Offers",
+  "datetime": "2026-04-18T14:00:00+08:00",
+  "duration_sec": 1800,
+  "language": "en",
+  "source_url": "",
+  "meeting_type": "One-on-One Discussion",
+
+  "participants": [
+    {
+      "name": "Haoyu Wang",
+      "role": "Software Engineer",
+      "aliases": [
+        "Haoyu",
+        "H. Wang"
+      ]
+    },
+    {
+      "name": "Xiaowen Mai",
+      "role": "Software Engineer",
+      "aliases": [
+        "Xiaowen",
+        "X. Mai"
+      ]
+    }
+  ],
+
+  "organizations": [
+    "Big Tech Recruitment"
+  ],
+
+  "topics": [
+    "Resume Optimization and Project Showcase",
+    "Technical Interview Preparation Strategy",
+    "System Design and Behavioral Rounds",
+    "Networking and Referral Strategy"
+  ],
+
+  "keywords": [
+    "Big Tech",
+    "FAANG",
+    "LeetCode",
+    "System Design",
+    "Resume",
+    "Referral",
+    "Interview Prep",
+    "Offer Negotiation"
+  ],
+
+  "related_files": {
+    "transcript": "data015.md",
+    "meeting_summary": "meetLevel015.md",
+    "summary_embedding": "summary015.md"
+  },
+
+  "embedding_text_pointer": "summary015.md",
+
+  "summary_brief": "Haoyu Wang and Xiaowen Mai, colleagues at the same company, discussed actionable strategies for landing offers at top-tier tech companies. They covered resume optimization with quantified impact metrics, a structured LeetCode preparation plan, system design interview techniques, behavioral question frameworks, and leveraging internal referrals and networking effectively.",
+
+  "actions": [
+    {
+      "action_id": "M015-A01",
+      "task": "Complete 150 LeetCode problems covering core patterns (sliding window, dynamic programming, graph traversal) within the next 8 weeks.",
+      "assignee": {
+        "name": "Haoyu Wang",
+        "role": "Software Engineer",
+        "aliases": ["Haoyu", "H. Wang"]
+      },
+      "description_plain": "Follow a structured LeetCode study plan focusing on high-frequency patterns to build consistent problem-solving speed.",
+      "due_date": "2026-06-13",
+      "status": "open",
+      "priority": "high"
+    },
+    {
+      "action_id": "M015-A02",
+      "task": "Revise resume to follow the XYZ format with quantified impact metrics, and reach out to at least 3 internal referrals at target companies.",
+      "assignee": {
+        "name": "Xiaowen Mai",
+        "role": "Software Engineer",
+        "aliases": ["Xiaowen", "X. Mai"]
+      },
+      "description_plain": "Rewrite resume bullet points using the Accomplished X by doing Y which resulted in Z format, and activate referral network.",
+      "due_date": "2026-05-01",
+      "status": "open",
+      "priority": "high"
+    }
+  ]
+}

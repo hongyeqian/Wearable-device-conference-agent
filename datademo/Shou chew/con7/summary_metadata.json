@@ -1,0 +1,32 @@
+{
+  "meeting_id": "data007",
+  "datetime": "2023-04-19T12:00:00+00:00",
+  "participants": [
+    "Shou Chew",
+    "Chris Anderson"
+  ],
+  "topics": [
+    "Discovery-First Design vs. Social Graph",
+    "Recommendation Mechanics & Early Growth Fairness",
+    "Platform DNA vs. Competitors & Filter Bubbles",
+    "Community Guidelines & Youth Protections",
+    "Screen Time, Addiction Risk & Digital Wellness",
+    "U.S. vs. China Youth Experience — Clarification",
+    "Harmful Trends, Sexualized Content & Moderation at Scale",
+    "Data Security, ByteDance Links & Project Texas"
+  ],
+  "actions": [
+    {
+      "action_id": "M007-A01",
+      "task": "Continue Project Texas Rollout (Shou Chew)"
+    },
+    {
+      "action_id": "M007-A02",
+      "task": "Strengthen Teen Safety & Moderation Framework (Trust & Safety / Policy Team)"
+    },
+    {
+      "action_id": "M007-A03",
+      "task": "Promote Family Pairing & Parental Education (Parenting & Education Partnerships)"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "meeting_id": "data015",
+  "datetime": "2026-04-18T14:00:00+08:00",
+  "participants": [
+    "Haoyu Wang",
+    "Xiaowen Mai"
+  ],
+  "topics": [
+    "Resume Optimization — XYZ Format and Quantified Impact",
+    "LeetCode Preparation — Pattern-Based Methodology",
+    "System Design and Behavioral Interview Frameworks",
+    "Networking and Referral Activation"
+  ],
+  "actions": [
+    {
+      "action_id": "M015-A01",
+      "task": "LeetCode Pattern Completion"
+    },
+    {
+      "action_id": "M015-A02",
+      "task": "Resume Rewrite and Referral Outreach"
+    }
+  ]
+}

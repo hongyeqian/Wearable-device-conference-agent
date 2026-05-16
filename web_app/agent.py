@@ -27,7 +27,10 @@ from google.adk.agents.callback_context import CallbackContext
 
 from google.genai import types
 
-from config.settings import DATA_DIR, VECTOR_STORE_DIR, CURRENT_USER, OPENAI_API_KEY, OPENAI_MODEL
+from config.settings import DATA_DIR, VECTOR_STORE_DIR, OPENAI_API_KEY, OPENAI_MODEL, DEFAULT_USER
+
+# Define the active user for the lifetime of this server process
+ACTIVE_USER = os.environ.get("CURRENT_USER", DEFAULT_USER)
 
 from src.data_loader.loader import DataLoader
 from src.chunking.chunker import HierarchicalChunker
@@ -237,27 +240,53 @@ class FullRAGSystemAgent(BaseAgent):
         logger.info("FullRAGSystemAgent: Initialization complete!")
         logger.info("=" * 80)
     
+    def _match_user_folder(self, user_id: str) -> str:
+        """
+        Match a given user_id to a physical folder name in DATA_DIR.
+        Supports case-insensitive matching. Falls back to ACTIVE_USER if no match.
+        """
+        # "user" is the default ID in ADK web UI if not specified
+        if not user_id or user_id.lower() == "user":
+            return ACTIVE_USER
+            
+        data_path = Path(DATA_DIR)
+        if not data_path.exists():
+            return ACTIVE_USER
+            
+        # Case-insensitive search for the user folder
+        try:
+            for folder in data_path.iterdir():
+                if folder.is_dir() and folder.name.lower() == user_id.lower():
+                    return folder.name
+        except Exception as e:
+            logger.warning(f"[{self.name}] Error scanning DATA_DIR for user match: {e}")
+            
+        return user_id # Fallback to raw ID if folder not found
+
     async def _run_async_impl(
         self, ctx: InvocationContext
     ) -> AsyncGenerator[Event, None]:
         """
-        Custom orchestration logic:
-        1. Get user query from state
-        2. Run planner agent to decide need_rewrite / need_rag
-        3. If need_rewrite: run query rewrite pipeline
-        4. If need_rag: run retrieval
-        5. Yield final event with results in state
+        Main execution logic for the RAG agent.
+        1. Extract query
+        2. Resolve user dynamically (ADK Native)
+        3. Run orchestration pipeline
         """
-        logger.info(f"[{self.name}] Starting RAG system orchestration...")
-        
-        # Step 0: Extract user query from user_content and store in session state
+        # Step 0: Extract user query and resolve user identity
         user_query = ""
         if ctx.user_content and ctx.user_content.parts:
             user_query = ctx.user_content.parts[0].text or ""
+            
+        # Resolve current user from ADK InvocationContext (userId from API/Web UI)
+        raw_user_id = ctx.user_id
+        current_user = self._match_user_folder(raw_user_id)
         
-        # Store in session state for planner_agent to access via {user_query}
+        # Store in session state for other components (QueryRewriter, Retrieval)
+        ctx.session.state["CURRENT_USER"] = current_user
         ctx.session.state["user_query"] = user_query
-        logger.info(f"[{self.name}] User query extracted and stored: {user_query[:100]}...")
+        
+        logger.info(f"[{self.name}] User ID: '{raw_user_id}' -> Matched Folder: '{current_user}'")
+        logger.info(f"[{self.name}] Processing query: {user_query[:100]}...")
         
         # Step 1: Get user query from state (set by the runner)
         if not user_query:
@@ -295,7 +324,8 @@ class FullRAGSystemAgent(BaseAgent):
         if plan.need_rewrite:
             logger.info(f"[{self.name}] Running query rewrite...")
             query_to_rewrite = plan.resolved_query if plan.resolved_query else user_query
-            rewrite_result = await self._run_query_rewrite(query_to_rewrite)
+            # Pass current_user to query rewriter
+            rewrite_result = await self._run_query_rewrite(query_to_rewrite, current_user=ctx.session.state["CURRENT_USER"])
             if rewrite_result:
                 ctx.session.state["rewrite_result"] = {
                     "rewritten_query": rewrite_result.rewritten_query,
@@ -399,12 +429,12 @@ class FullRAGSystemAgent(BaseAgent):
         logger.warning(f"[{self.name}] Planner didn't return valid plan, using default")
         return Plan(need_rewrite=False, need_rag=True, reason="Default: using RAG")
     
-    async def _run_query_rewrite(self, query: str):
+    async def _run_query_rewrite(self, query: str, current_user: str = ""):
         """
         Run the three-stage query rewrite pipeline.
         """
         try:
-            result = await rewrite_query_async(query)
+            result = await rewrite_query_async(query, current_user=current_user)
             
             # Fallback: extract meeting_ids from pandas_query result if missing
             if result.relevant_meeting_ids:
@@ -441,24 +471,31 @@ class FullRAGSystemAgent(BaseAgent):
                 logger.error(f"[{self.name}] Retriever not initialized!")
                 return []
             
-            # Use meeting_ids filter if available
-            meeting_ids_filter = set(relevant_meeting_ids) if relevant_meeting_ids else None
+            # Base security filter: current user's visible meetings
+            from sub_agents.metadata_manager import get_meetings_metadata
+            current_user = ctx.session.state.get("CURRENT_USER", "")
+            mdf = get_meetings_metadata(current_user)
+            user_records = mdf.records
+            all_visible_ids = set(r["meeting_id"] for r in user_records) if user_records else set()
             
-            # Perform search
-            if meeting_ids_filter:
-                results = self.retriever.vector_store.search_with_meeting_ids_filter(
-                    query_text=query,
-                    level='summary',
-                    meeting_ids=meeting_ids_filter,
-                    top_k=top_k * 2
-                )
+            # Use meeting_ids filter if available, intersect with visible ids
+            if relevant_meeting_ids:
+                meeting_ids_filter = set(relevant_meeting_ids).intersection(all_visible_ids)
             else:
-                results = self.retriever.vector_store.search_with_meeting_ids_filter(
-                    query_text=query,
-                    level='summary',
-                    meeting_ids=None,
-                    top_k=top_k * 2
-                )
+                meeting_ids_filter = all_visible_ids
+                
+            if not meeting_ids_filter:
+                logger.info(f"[{self.name}] No visible meetings match the query filters.")
+                return []
+            
+            
+            # Perform search (meeting_ids_filter is always provided now)
+            results = self.retriever.vector_store.search_with_meeting_ids_filter(
+                query_text=query,
+                level='summary',
+                meeting_ids=meeting_ids_filter,
+                top_k=top_k * 2
+            )
             
             # Extract hits from results
             if isinstance(results, dict):
@@ -577,10 +614,14 @@ class FullRAGSystemAgent(BaseAgent):
         else:
             logger.info("\n[Step 4] No new meetings to process ✓")
 
-        # Step 5: Register meeting IDs
-        logger.info("\n[Step 5] Registering meeting IDs...")
-        self.all_meeting_ids = {m.meeting_id for m in all_meetings}
-        logger.info(f"✓ Registered {len(self.all_meeting_ids)} meeting IDs")
+        # Step 5: Registry Check
+        # We no longer pin a single user's IDs at startup to support multi-user.
+        # But we can verify if the default user exists as a sanity check.
+        logger.info("\n[Step 5] Verifying user metadata...")
+        from sub_agents.metadata_manager import get_meetings_metadata
+        mdf = get_meetings_metadata(ACTIVE_USER)
+        visible_ids_count = len(mdf.records) if mdf.records else 0
+        logger.info(f"✓ Default user '{ACTIVE_USER}' has {visible_ids_count} meetings ready.")
         
         # Step 6: Create retriever
         logger.info("\n[Step 6] Creating hierarchical retriever...")
@@ -591,12 +632,12 @@ class FullRAGSystemAgent(BaseAgent):
 
         # Mark as initialized
         self.initialized = True
-        self.total_meetings = len(all_meetings)
         
         logger.info("\n" + "=" * 80)
         logger.info("RAG System Initialized Successfully!")
-        logger.info(f" Total meetings available: {len(all_meetings)}")
-        logger.info(f" Processed meetings: {len(processed_meeting_ids)}")
+        logger.info(f" Total meetings indexed across all users: {len(all_meetings)}")
+        logger.info(f" Default user context: {ACTIVE_USER}")
+        logger.info(f" Processed meetings in VectorStore: {len(processed_meeting_ids)}")
         logger.info(f"   New meetings processed: {len(new_meetings)}")
         logger.info("=" * 80)
 
@@ -641,14 +682,19 @@ class FullRAGSystemAgent(BaseAgent):
 
             loader = DataLoader(DATA_DIR)
             new_meetings = []
+            affected_users = set()
 
             # Step 1: Load meetings from the new directories
             for con_dir in new_con_dirs:
                 try:
+                    # Get user name from parent directory
+                    user_name = con_dir.parent.name
+                    affected_users.add(user_name)
+                    
                     meeting = loader._load_meeting(con_dir)
                     new_meetings.append(meeting)
                     logger.info(
-                        f"[IncrementalSync]   ✓ Loaded: {meeting.meeting_id} - {meeting.title}"
+                        f"[IncrementalSync]   ✓ Loaded: {meeting.meeting_id} (User: {user_name})"
                     )
                 except Exception as e:
                     logger.error(
@@ -686,26 +732,56 @@ class FullRAGSystemAgent(BaseAgent):
             logger.info("[IncrementalSync] Saving vector store...")
             vector_store.save(VECTOR_STORE_DIR)
 
-            # Step 5: Reload pandas MeetingsDataFrame singleton
-            # (summary_metadata.json was generated in Step 1 by DataLoader)
-            logger.info("[IncrementalSync] Reloading MeetingsDataFrame...")
-            from sub_agents.pandas_utils import reload_meetings_df
-            mdf = reload_meetings_df()
-            logger.info(
-                f"[IncrementalSync]   ✓ MeetingsDataFrame reloaded: "
-                f"{len(mdf.df)} meetings in DataFrame"
-            )
+            # Step 5: Reload MetadataManager for affected users
+            # This ensures the new meeting is visible in the participant list and filters
+            from sub_agents.metadata_manager import reload_meetings_metadata
+            for user_name in affected_users:
+                logger.info(f"[IncrementalSync] Reloading metadata for user: {user_name}")
+                reload_meetings_metadata(user_name)
 
-            # Step 6: Update meeting ID registry
-            new_ids = {m.meeting_id for m in new_meetings}
-            self.all_meeting_ids.update(new_ids)
+            # Step 6: Update meeting ID registry for the active user
+            # (In a real multi-user environment, this might need more logic)
+            from sub_agents.metadata_manager import get_meetings_metadata
+            mdf = get_meetings_metadata(ACTIVE_USER)
+            visible_ids = set(r["meeting_id"] for r in mdf.records)
+            self.all_meeting_ids = visible_ids
             self.total_meetings = len(self.all_meeting_ids)
 
             logger.info("\n" + "=" * 60)
             logger.info("[IncrementalSync] ✅ Incremental sync complete!")
             logger.info(f"  New meetings indexed: {[m.meeting_id for m in new_meetings]}")
-            logger.info(f"  Total meetings now: {self.total_meetings}")
+            logger.info(f"  Total meetings now for {ACTIVE_USER}: {self.total_meetings}")
             logger.info("=" * 60 + "\n")
+
+    def _on_meeting_deleted(self, rel_path: Optional[str], person_name: Optional[str]) -> None:
+        """
+        Handle meeting deletion by reloading metadata.
+        
+        Args:
+            rel_path: Relative path of the deleted con* directory (e.g. "Elon/con1")
+            person_name: Name of the person if a whole person directory was deleted
+        """
+        with self._sync_lock:
+            logger.info("\n" + "🗑️" * 20)
+            from sub_agents.metadata_manager import reload_meetings_metadata
+            
+            if person_name:
+                logger.info(f"[DeletionSync] Person directory deleted: {person_name}")
+                reload_meetings_metadata(person_name)
+            elif rel_path:
+                logger.info(f"[DeletionSync] Meeting directory deleted: {rel_path}")
+                # Extract user name from the first part of the relative path
+                user_name = rel_path.split("/")[0]
+                reload_meetings_metadata(user_name)
+            
+            # Refresh active user registry
+            from sub_agents.metadata_manager import get_meetings_metadata
+            mdf = get_meetings_metadata(ACTIVE_USER)
+            self.all_meeting_ids = set(r["meeting_id"] for r in mdf.records)
+            self.total_meetings = len(self.all_meeting_ids)
+            
+            logger.info("[DeletionSync] ✅ Metadata reloaded after deletion")
+            logger.info("🗑️" * 20 + "\n")
 
     def start_watcher(self) -> None:
         """
@@ -716,19 +792,23 @@ class FullRAGSystemAgent(BaseAgent):
         """
         from src.watcher.meeting_watcher import MeetingWatcher
 
-        # Derive processed directory names from all_meeting_ids.
-        # Convention: meeting_id like "data001" lives in folder "con1",
-        # but we track by the actual directory names found on disk.
+        # Derive processed directory paths.
+        # Use recursive glob to find all con* directories in user folders.
         data_dir = Path(DATA_DIR)
-        processed_dir_names = set()
-        for con_dir in data_dir.glob("con*"):
+        processed_rel_paths = set()
+        for con_dir in data_dir.rglob("con*"):
             if con_dir.is_dir():
-                processed_dir_names.add(con_dir.name)
+                try:
+                    rel_path = str(con_dir.relative_to(data_dir)).replace("\\", "/")
+                    processed_rel_paths.add(rel_path)
+                except ValueError:
+                    continue
 
         self._watcher = MeetingWatcher(
             data_dir=data_dir,
             on_new_meetings_callback=self._incremental_sync,
-            processed_meeting_dirs=processed_dir_names,
+            on_deleted_meetings_callback=self._on_meeting_deleted,
+            processed_rel_paths=processed_rel_paths,
         )
         self._watcher.start()
 

@@ -64,8 +64,6 @@ DevelopmentRAG/
 # Create virtual environment
 python -m venv .venv
 
-# cd to the Astar_RAG_System
-cd Astar_RAG_System (tab)
 # Activate virtual environment
 ./.venv/Scripts/Activate.ps1    // conda environment cannot link openai use venv!!!
 
@@ -219,12 +217,8 @@ EMBEDDING_MODEL=text-embedding-3-small
 
 
 
-## Future Improvements
-
-1. **Query Rewriter Agent**: Introduce reward model to improve rewriting quality
+## Future Improvements1. **Query Rewriter Agent**: Introduce reward model to improve rewriting quality
 2. **Evaluation Framework**: Integrate RAGAs and other evaluation tools
 3. **Multi-modal Support**: Support audio and video meeting recordings
 4. **Enterprise Deployment**: Add authentication, rate limiting, and other production features
-5. conside to use mapping knowledge domain
-
-## LicenseMIT License
+5. conside to use mapping knowledge domain## LicenseMIT License

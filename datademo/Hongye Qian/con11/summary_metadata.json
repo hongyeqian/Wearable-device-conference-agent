@@ -1,0 +1,27 @@
+{
+  "meeting_id": "data011",
+  "datetime": "2025-11-17T14:34:00+08:00",
+  "participants": [
+    "Ankit",
+    "Hongye Qian"
+  ],
+  "topics": [
+    "Elastic Search Configuration",
+    "Benefits of Elastic Search",
+    "Implementation Challenges",
+    "Testing and Results",
+    "Future Steps and Recommendations"
+  ],
+  "actions": [
+    {
+      "action_id": "M011-A01",
+      "task": "Hongye Qian to Test Traditional Factors",
+      "assignee": "Hongye Qian"
+    },
+    {
+      "action_id": "M011-A02",
+      "task": "Ankit to Provide Transcripts",
+      "assignee": "Ankit"
+    }
+  ]
+}

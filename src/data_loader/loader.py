@@ -43,17 +43,21 @@ class DataLoader:
         """Load all meetings data"""
         meetings = []
         
-        # iterate all con* folders
-        for con_dir in sorted(self.data_dir.glob("con*")):
-            if not con_dir.is_dir():
+        # iterate all con* folders within user directories (datademo/user_name/con*)
+        for user_dir in sorted(self.data_dir.iterdir()):
+            if not user_dir.is_dir():
                 continue
                 
-            try:
-                meeting = self._load_meeting(con_dir)
-                meetings.append(meeting)
-                print(f"Success Loaded: {meeting.meeting_id} - {meeting.title}")
-            except Exception as e:
-                print(f"Fail Error loading {con_dir.name}: {e}")
+            for con_dir in sorted(user_dir.glob("con*")):
+                if not con_dir.is_dir():
+                    continue
+                    
+                try:
+                    meeting = self._load_meeting(con_dir)
+                    meetings.append(meeting)
+                    print(f"Success Loaded: {meeting.meeting_id} - {meeting.title}")
+                except Exception as e:
+                    print(f"Fail Error loading {con_dir.name}: {e}")
                 
         print(f"\n Total meetings loaded: {len(meetings)}")
         return meetings
@@ -93,7 +97,7 @@ class DataLoader:
             metadata=metadata
         )
 
-        # 4. Generate and save summary_metadata.json
+        # 4. Generate summary metadata JSON for filtering
         self._generate_summary_metadata(meeting, con_dir)
 
         return meeting

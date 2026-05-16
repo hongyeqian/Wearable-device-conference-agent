@@ -1,0 +1,33 @@
+{
+  "meeting_id": "data006",
+  "datetime": "2025-01-07T00:00:00Z",
+  "participants": [
+    "Jensen Huang",
+    "Cleo Abram"
+  ],
+  "topics": [
+    "Reinventing Computing and the Origins of Nvidia",
+    "The GPU as a “Time Machine” and the Birth of CUDA",
+    "AlexNet 2012 — Deep Learning’s Breakthrough Moment",
+    "Ten Years of Belief — Patience, Principles, and Core Convictions",
+    "From Science of AI to Application Science — AI’s Next Decade",
+    "Omniverse + Cosmos — Building the World Model for Robotics",
+    "AI Risks and Safety Engineering",
+    "Energy Efficiency and Hardware Evolution",
+    "Betting on Flexibility — Beyond Transformers",
+    "Pushing Physical Limits and Cross-Disciplinary Engineering",
+    "Future Bets — Fusion of Omniverse and Cosmos, Digital Biology, and Climate Science",
+    "Preparing for a Superhuman AI Future",
+    "Legacy and Impact — Looking Back at Nvidia’s Mission"
+  ],
+  "actions": [
+    {
+      "action_id": "M006-A01",
+      "task": "Advance Fusion of Omniverse and Cosmos (Jensen Huang)"
+    },
+    {
+      "action_id": "M006-A02",
+      "task": "Promote AI Literacy and Tutoring for the Next Generation (Jensen Huang)"
+    }
+  ]
+}

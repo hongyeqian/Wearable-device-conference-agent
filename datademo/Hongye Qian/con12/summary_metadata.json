@@ -1,0 +1,21 @@
+{
+  "meeting_id": "data012",
+  "datetime": "2025-11-29T00:00:00+08:00",
+  "participants": [
+    "Ankit",
+    "Hongye Qian"
+  ],
+  "topics": [
+    "High Level Topic Discussion",
+    "Terminology Clarification",
+    "Embedding and Metadata Discussion",
+    "Indexing and Efficiency Concerns",
+    "Project Management and Code Quality"
+  ],
+  "actions": [
+    {
+      "action_id": "M012-A01",
+      "task": "Explore New Project Structure by Hongye Qian"
+    }
+  ]
+}

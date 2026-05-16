@@ -1,0 +1,34 @@
+{
+  "meeting_id": "data010",
+  "datetime": "2025-11-21T16:00:00+08:00",
+  "participants": [
+    "Ankit",
+    "Hongye Qian"
+  ],
+  "topics": [
+    "Reference IDs and metadata–summary linkage",
+    "Metadata embedding fields and inverted index design",
+    "Building metadata embeddings and selecting top metadata candidates",
+    "Segment handling and mapping summary chunks to meeting embeddings",
+    "Meeting-level embeddings, topic chunks, and FAISS index usage",
+    "BM25 on summarized text and risk of missing query keywords",
+    "Hybrid score computation and current retrieval quality",
+    "Alternative retrieval paths and testing with LLM",
+    "Scalability concerns, DFS vs BFS, and graph-embedding idea",
+    "Use of Gemini transcripts and meeting recordings for validation"
+  ],
+  "actions": [
+    {
+      "action_id": "M010-A01",
+      "task": "Hongye Qian — Create PPT diagram of retrieval flow"
+    },
+    {
+      "action_id": "M010-A02",
+      "task": "Ankit — Integrate LLM component and test retrieval pipeline"
+    },
+    {
+      "action_id": "M010-A03",
+      "task": "Hongye Qian & Ankit — Use meeting transcripts for validation"
+    }
+  ]
+}
