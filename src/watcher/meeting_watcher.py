@@ -32,31 +32,84 @@ _REQUIRED_FILE_PATTERNS = [
     "summary*.md",
 ]
 
-# Debounce: wait this many seconds after detecting a new directory
-# before checking file completeness (allows time for all files to be copied)
-_DEBOUNCE_SECONDS = 10
+# Maximum seconds to wait for all required files to appear and stabilise
+_MAX_WAIT_SECONDS = 60
 
-# Maximum number of retries before giving up on a directory
-_MAX_RETRIES = 6
+# Seconds between successive file-existence polls
+_CHECK_INTERVAL = 2
+
+# Files must remain unchanged (size + mtime) for this many seconds
+# before they are considered fully written
+_STABLE_SECONDS = 5
+
+
+def files_stable(files: list[Path], stable_seconds: float = _STABLE_SECONDS) -> bool:
+    """
+    Check whether files have stopped changing (size and mtime are constant).
+
+    Takes two snapshots separated by ``stable_seconds`` and compares them.
+    Returns False immediately if any file disappears between snapshots.
+
+    Args:
+        files: List of file paths to monitor.
+        stable_seconds: Seconds to wait between snapshots.
+
+    Returns:
+        True if all files exist and their size/mtime are unchanged.
+    """
+    try:
+        state1 = {f: (f.stat().st_size, f.stat().st_mtime) for f in files}
+    except OSError:
+        return False
+
+    time.sleep(stable_seconds)
+
+    try:
+        state2 = {f: (f.stat().st_size, f.stat().st_mtime) for f in files}
+    except OSError:
+        return False
+
+    return state1 == state2
 
 
 def check_completeness(con_dir: Path) -> bool:
     """
-    Check whether a con* directory contains all 4 required files.
+    Block until a con* directory contains all required files AND those
+    files have finished being written (stable size/mtime).
+
+    Polls every ``_CHECK_INTERVAL`` seconds up to a ``_MAX_WAIT_SECONDS``
+    deadline.  Returns True as soon as completeness + stability are
+    confirmed, or False if the deadline is exceeded.
 
     Args:
         con_dir: Path to the con* directory.
 
     Returns:
-        True if all 4 required file patterns are matched, False otherwise.
+        True if all required files are present and stable before the
+        deadline, False otherwise.
     """
-    if not con_dir.exists():
-        return False
-    for pattern in _REQUIRED_FILE_PATTERNS:
-        matches = list(con_dir.glob(pattern))
-        if not matches:
+    deadline = time.time() + _MAX_WAIT_SECONDS
+
+    while time.time() < deadline:
+        if not con_dir.exists():
             return False
-    return True
+
+        matched_files: list[Path] = []
+        all_found = True
+
+        for pattern in _REQUIRED_FILE_PATTERNS:
+            matches = list(con_dir.glob(pattern))
+            if not matches:
+                all_found = False
+                break
+            matched_files.extend(matches)
+
+        if all_found and files_stable(matched_files):
+            return True
+
+        time.sleep(_CHECK_INTERVAL)
+
+    return False
 
 
 class _MeetingDirHandler(FileSystemEventHandler):
@@ -155,7 +208,6 @@ class MeetingWatcher:
         on_new_meetings_callback: Callable[[List[Path]], None],
         on_deleted_meetings_callback: Callable[[Optional[str], Optional[str]], None],
         processed_rel_paths: Optional[Set[str]] = None,
-        debounce_seconds: float = _DEBOUNCE_SECONDS,
     ):
         """
         Args:
@@ -164,13 +216,11 @@ class MeetingWatcher:
             on_deleted_meetings_callback: Callback for deleted paths. 
                                         Args: (rel_path, person_name)
             processed_rel_paths: Set of relative paths already processed (e.g. {"Elon/con1"}).
-            debounce_seconds: Seconds to wait after detection before checking completeness.
         """
         self.data_dir = Path(data_dir).absolute()
         self._callback_add = on_new_meetings_callback
         self._callback_del = on_deleted_meetings_callback
         self.processed_rel_paths: Set[str] = set(processed_rel_paths or set())
-        self._debounce_seconds = debounce_seconds
 
         # Pending directories awaiting completeness check
         self._pending: Set[Path] = set()
@@ -234,21 +284,29 @@ class MeetingWatcher:
             logger.error(f"[MeetingWatcher] Deletion callback failed: {e}")
 
     def _checker_loop(self) -> None:
-        """Background loop for debounce + completeness check."""
-        retry_counts: dict[str, int] = {}
+        """Background loop that drains pending directories and checks completeness.
 
+        Each pending directory is given up to ``_MAX_WAIT_SECONDS`` to become
+        complete (all required files present and stable).  Because
+        ``check_completeness`` is a blocking call, directories are processed
+        sequentially; new directories added during processing are picked up
+        in the next iteration.
+        """
         while not self._stop_event.is_set():
-            time.sleep(1.0) # Check every second
-            
+            time.sleep(1.0)
+
             with self._pending_lock:
                 if not self._pending:
                     continue
                 snapshot = set(self._pending)
+                self._pending -= snapshot
 
             ready_dirs: List[Path] = []
-            still_pending: Set[Path] = set()
 
             for dir_path in snapshot:
+                if self._stop_event.is_set():
+                    break
+
                 try:
                     rel_path = str(dir_path.relative_to(self.data_dir)).replace("\\", "/")
                 except ValueError:
@@ -257,19 +315,11 @@ class MeetingWatcher:
                 if check_completeness(dir_path):
                     logger.info(f"[MeetingWatcher] ✅ Ready: {rel_path}")
                     ready_dirs.append(dir_path)
-                    retry_counts.pop(rel_path, None)
                 else:
-                    count = retry_counts.get(rel_path, 0) + 1
-                    retry_counts[rel_path] = count
-                    if count > _MAX_RETRIES:
-                        logger.warning(f"[MeetingWatcher] ⚠️ Giving up on {rel_path} after {_MAX_RETRIES} retries")
-                        retry_counts.pop(rel_path, None)
-                    else:
-                        still_pending.add(dir_path)
-
-            with self._pending_lock:
-                self._pending -= snapshot
-                self._pending |= still_pending
+                    logger.warning(
+                        f"[MeetingWatcher] ⚠️ Giving up on {rel_path} "
+                        f"after {_MAX_WAIT_SECONDS}s — files incomplete or unstable"
+                    )
 
             if ready_dirs:
                 try:

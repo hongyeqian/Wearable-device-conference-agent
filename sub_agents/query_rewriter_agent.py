@@ -519,6 +519,13 @@ def resolve_by_regex(query: str, person_name: Optional[str] = None, current_user
             from sub_agents.metadata_manager import get_meetings_metadata
             mdf = get_meetings_metadata(current_user)
             meetings = mdf.get_last_n_meetings(n=n, person_name=person_name)
+            
+            if not meetings:
+                logger.warning(
+                    f"[Stage3-Layer1-Regex] No meetings found for n={n}, person={person_name}"
+                )
+                return None
+            
             meeting_ids = [m["meeting_id"] for m in meetings]
             dates = [m["date"] for m in meetings]
             
