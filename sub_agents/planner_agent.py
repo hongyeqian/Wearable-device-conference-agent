@@ -5,11 +5,14 @@ from pydantic import BaseModel, Field
 from typing import List, Literal
 from google.adk.agents import LlmAgent
 from google.adk.models import LiteLlm
+# pyrefly: ignore [missing-import]
 from config.settings import OPENAI_API_KEY, OPENAI_MODEL
 
 
 class Plan(BaseModel):
     """Output schema for planner agent"""
+    # TODO (Memory Phase 2): Add need_memory field to determine when to query long-term memory
+    # need_memory: bool = Field(description="Whether the query relates to the user's past preferences or context.")
     need_rewrite: bool = Field(
         description="Whether the resolved_query contains ambiguities (pronouns, relative time, fuzzy names) that require further pipeline resolution."
     )
@@ -59,6 +62,8 @@ RAG searches the meeting records database, NOT conversation history.
 True for ANY question about meetings: who attended, what was discussed, decisions, action items, topics, or any meeting content.
 False ONLY for: greetings, general knowledge, math, or writing tasks with no meeting connection.
 Default: when uncertain, set True.
+
+# TODO (Memory Phase 2): Add STEP 4 - need_memory criteria to determine when to search long-term memory.
 
 Return valid JSON matching the schema.""",
     description="Decides whether to use query rewrite and RAG retrieval",

@@ -1,0 +1,112 @@
+{
+  "results": [
+    {
+      "id": "98cda960-9dbd-44fa-bb6a-2de6f9a0a391",
+      "memory": "User recapped a meeting held on November 30, 2025, which covered key topics including Semantic Normalization, Architecture Design and Implementation, and Assigned Actions.",
+      "hash": "d072b3946abd9332d46313d8b5edd5c1",
+      "metadata": null,
+      "created_at": "2026-05-30T13:48:29.929987+00:00",
+      "updated_at": "2026-05-30T13:48:29.929987+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "54fc5eba-d01f-484b-b641-a8043c0c2103",
+      "memory": "The meeting discussed introducing a semantic module for user queries to standardize and improve query handling through semantic normalization, which involves extracting key elements and identifying significant words in queries.",
+      "hash": "b16a7e7b5405d39210da8d44bcd0dfce",
+      "metadata": null,
+      "created_at": "2026-05-30T13:48:29.937682+00:00",
+      "updated_at": "2026-05-30T13:48:29.937682+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "aab3a122-47ee-4037-a24b-7e063147e755",
+      "memory": "The architecture design discussed in the meeting emphasized summarizing conversations with variable summary levels based on conversation length and identifying conversation boundaries.",
+      "hash": "4750da3d73a07677e9e1d9b8846dc572",
+      "metadata": null,
+      "created_at": "2026-05-30T13:48:29.941727+00:00",
+      "updated_at": "2026-05-30T13:48:29.941727+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "6912228c-0795-435b-9cc8-3229bfe0f534",
+      "memory": "Hongye Qian is tasked with initiating the second architecture design, while Ankit is responsible for preparing a detailed system diagram and developing a basic chat interface for testing.",
+      "hash": "c1b12a7a99f6b7c0dfc6fa50b52b2854",
+      "metadata": null,
+      "created_at": "2026-05-30T13:48:29.945266+00:00",
+      "updated_at": "2026-05-30T13:48:29.945266+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "3da7d5b4-151c-40fa-a503-dec337ece3ad",
+      "memory": "User expressed a desire to learn more about Semantic Normalization, which was explained as a means to standardize representations for better data analysis and retrieval.",
+      "hash": "ee7299421f5752388c13140a2acae65b",
+      "metadata": null,
+      "created_at": "2026-05-30T13:48:29.948777+00:00",
+      "updated_at": "2026-05-30T13:48:29.948777+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "b3547fa6-95ed-4c7f-a434-bafffcc71859",
+      "memory": "User did not specify any further action related to Semantic Normalization after receiving general information about the concept.",
+      "hash": "888c86a8e434ed1fe5ec02df97dcecb7",
+      "metadata": null,
+      "created_at": "2026-05-30T13:48:29.952321+00:00",
+      "updated_at": "2026-05-30T13:48:29.952321+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "3dd849d0-2116-474f-81f9-6d302f22c566",
+      "memory": "User inquired about the topics discussed by Hongye Qian in the meeting held on November 30, 2025, which included embedding and metadata, project management and code quality, and architecture design.",
+      "hash": "3fcbbfdbedb52f1410644caa15b3a4fc",
+      "metadata": null,
+      "created_at": "2026-05-30T13:54:28.347499+00:00",
+      "updated_at": "2026-05-30T13:54:28.347499+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "58bc30d4-0325-4617-8567-57a7fb2c45ea",
+      "memory": "Hongye Qian raised questions about determining top K meetings based on user queries and expressed concerns about the effectiveness of using embedding metadata for filtering.",
+      "hash": "f79b15c5830601c3d4a7de81261c63ce",
+      "metadata": null,
+      "created_at": "2026-05-30T13:54:28.356561+00:00",
+      "updated_at": "2026-05-30T13:54:28.356561+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "d206e212-d450-461d-93ee-6ed20769b581",
+      "memory": "The importance of maintaining code quality was emphasized in the meeting, with Hongye agreeing on the need for careful oversight as the codebase grows.",
+      "hash": "3686e1f2776a5e964186fb69d0f1fc83",
+      "metadata": null,
+      "created_at": "2026-05-30T13:54:28.360080+00:00",
+      "updated_at": "2026-05-30T13:54:28.360080+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "5fff046f-6a20-4844-8297-734bf81a6ca0",
+      "memory": "Hongye was tasked with starting the second architecture design, focusing on summarization and efficiently managing user queries.",
+      "hash": "0bc7a8c40e9df4b3fa06eb5afd5810ba",
+      "metadata": null,
+      "created_at": "2026-05-30T13:54:28.364091+00:00",
+      "updated_at": "2026-05-30T13:54:28.364091+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "aa9595ea-3ba0-4231-8532-8fcaf785a3d6",
+      "memory": "Hongye was assigned to explore a new project structure to improve efficiency and to initiate the second architecture design.",
+      "hash": "d436400642a90273b9d63d07425d8780",
+      "metadata": null,
+      "created_at": "2026-05-30T13:54:28.367098+00:00",
+      "updated_at": "2026-05-30T13:54:28.367098+00:00",
+      "user_id": "Hongye_Qian"
+    },
+    {
+      "id": "7f4f7be2-8460-447a-b252-7515a7a4340b",
+      "memory": "The discussions reveal Hongye's involvement in both the technical and strategic aspects of the project, with no unresolved questions or tasks beyond the assigned action items.",
+      "hash": "43b95381a663ee1de9e5d8c487a5e061",
+      "metadata": null,
+      "created_at": "2026-05-30T13:54:28.372768+00:00",
+      "updated_at": "2026-05-30T13:54:28.372768+00:00",
+      "user_id": "Hongye_Qian"
+    }
+  ]
+}

@@ -53,7 +53,7 @@ ELASTICSEARCH_VERIFY_CERTS = os.getenv("ELASTICSEARCH_VERIFY_CERTS", "true").low
 ELASTICSEARCH_CA_CERTS = os.getenv("ELASTICSEARCH_CA_CERTS", None)  # Path to CA certificate if needed
 ELASTICSEARCH_TIMEOUT = int(os.getenv("ELASTICSEARCH_TIMEOUT", "30"))  # Request timeout in seconds
 
-DEFAULT_USER = "Elon Musk"
+DEFAULT_USER = "Hongye Qian"
 
 
 

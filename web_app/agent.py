@@ -3,6 +3,7 @@ import sys
 import json
 import logging
 import threading
+import asyncio
 from pathlib import Path
 from typing import Optional, Set, Dict, Any, List, AsyncGenerator
 from datetime import datetime
@@ -145,6 +146,21 @@ class MemoryMonitorPlugin(BasePlugin):
                 # JOIN ALL PARTS and print FULL text (no truncation)
                 full_summary = " ".join([p.text for p in content.parts if p.text])
                 print(f"📝 Full Summary Content:\n{full_summary}")
+                
+                # --- NEW: Mem0 Integration (Background Task) ---
+                user_id = invocation_context.session.state.get("CURRENT_USER", "default_user")
+                from src.memory.mem0_service import mem0_service
+                
+                # Fire-and-forget: run mem0.add in the background without blocking the response
+                logger.info(f"[Mem0] Dispatching background task to extract memory for {user_id}...")
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        mem0_service.add_session_memories,
+                        user_id=user_id,
+                        summary_text=full_summary
+                    )
+                )
+                
             print(f"⏰ Compacted Range: {comp_data.start_timestamp} to {comp_data.end_timestamp}")
         else:
             threshold = 4 
@@ -301,6 +317,11 @@ class FullRAGSystemAgent(BaseAgent):
             return
         
         logger.info(f"[{self.name}] Processing query: {user_query}")
+        
+        # TODO (Memory Phase 2): Query Mem0 for long-term user preferences
+        # if plan.need_memory:
+        #     user_memory_text = mem0_service.search_memories(user_id=current_user, query=user_query)
+        #     ctx.session.state["user_memory"] = user_memory_text
         
         # Step 2: Run planner agent to decide need_rewrite / need_rag
         logger.info(f"[{self.name}] Running planner agent...")
@@ -835,7 +856,7 @@ compaction_llm = LiteLlm(
 )
 
 compaction_config = EventsCompactionConfig(
-    compaction_interval=3,
+    compaction_interval=1,
     overlap_size=1,
     summarizer=LlmEventSummarizer(llm=compaction_llm)
 )

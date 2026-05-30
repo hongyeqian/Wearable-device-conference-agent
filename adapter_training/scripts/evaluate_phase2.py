@@ -505,6 +505,20 @@ def main():
     print("=" * 60)
     logger.info(f"Report saved to {output_path}")
 
+    # Export scores to CSV for correlation analysis
+    import csv
+    csv_path = str(output_path).replace(".md", ".csv")
+    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(["id", "signal_detection", "value_assignment", "completeness"])
+        for r in results:
+            if r.get("judge"):
+                j = r["judge"]
+                writer.writerow([r["id"], j["signal_detection"], j["value_assignment"], j["completeness"]])
+            else:
+                writer.writerow([r["id"], "", "", ""])
+    logger.info(f"CSV scores saved to {csv_path}")
+
 
 if __name__ == "__main__":
     main()

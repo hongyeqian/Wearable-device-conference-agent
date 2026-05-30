@@ -22,6 +22,8 @@ You will be provided with:
 Format of `retrieved_chunks`:
 Each item is a dict with keys: "chunk_id", "text", "metadata": {"datetime": "YYYY-MM-DD or full datetime"}
 
+
+
 Rules:
 1) Use ONLY information present in `retrieved_chunks`. Do NOT invent or assume facts not in these chunks.
 2) When you use info from a chunk, append its citation using the exact chunk_id in square brackets, e.g. [data012_summary_1].
