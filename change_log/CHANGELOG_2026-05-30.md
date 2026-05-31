@@ -5,8 +5,8 @@
 ### Added
 
 - **`src/memory/mem0_service.py`** — New module wrapping Mem0 initialization and background write logic.
-  - Configures Mem0 with a local ChromaDB vector store (`.mem0_store`) for persistent fact storage.
-  - Uses `gpt-4o-mini` as the extraction LLM via the OpenAI provider.
+  - Configures Mem0 with a local ChromaDB vector store (`.mem0_store`) for persistent fact storage. (I consider to change the long term memory from using Mem0 to VertexAiRagMemoryService(supported by Google) when we go to the production process)
+  - Uses `gpt-4o-mini` (supported by mem0 automatically) as the extraction LLM via the OpenAI provider.
   - Exposes `add_session_memories(user_id, summary_text)` for async background invocation.
   - Instantiates a global `mem0_service` singleton for use across the application.
 
