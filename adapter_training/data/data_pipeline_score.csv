@@ -1,0 +1,16 @@
+id,signal_detection,value_assignment,completeness
+01_comm_empty_good,5,5,5
+02_comm_empty_medium,3,3,3
+03_comm_empty_bad,1,1,1
+04_sched_incr_good,5,5,5
+05_sched_incr_medium,5,1,1
+06_sched_incr_bad,1,1,1
+07_focus_over_good,5,5,5
+08_focus_over_medium,5,3,3
+09_focus_over_bad,5,3,5
+10_nochange_good,5,5,5
+11_nochange_medium,3,3,3
+12_nochange_bad,1,1,1
+13_comm_incr_good,5,5,5
+14_comm_incr_medium,3,3,3
+15_comm_incr_bad,3,1,3

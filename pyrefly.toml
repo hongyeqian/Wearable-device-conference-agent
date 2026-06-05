@@ -1,0 +1,2 @@
+# Force Pyrefly to use the project's virtual environment interpreter
+python-interpreter-path = ".venv/Scripts/python.exe"

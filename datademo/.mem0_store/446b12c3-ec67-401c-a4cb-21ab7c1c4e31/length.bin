@@ -1,0 +1,13 @@
+
+
+
+CREATE TABLE IF NOT EXISTS events (
+    id TEXT NOT NULL,
+    app_name TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    invocation_id TEXT NOT NULL,
+    timestamp REAL NOT NULL,
+    event_data TEXT NOT NULL,
+    PRIMARY KEY (app_name, user_id, session_id, id),
+    FOREIGN KEY (app_name, user_id, session_id) REFERENCES sessions(app_name, user_id, id) ON DELETE CASCADE
