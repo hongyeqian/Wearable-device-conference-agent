@@ -11,8 +11,9 @@ from config.settings import OPENAI_API_KEY, OPENAI_MODEL
 
 class Plan(BaseModel):
     """Output schema for planner agent"""
-    # TODO (Memory Phase 2): Add need_memory field to determine when to query long-term memory
-    # need_memory: bool = Field(description="Whether the query relates to the user's past preferences or context.")
+    need_memory: bool = Field(
+        description="Whether the query relates to the user's past preferences or personal context."
+    )
     need_rewrite: bool = Field(
         description="Whether the resolved_query contains ambiguities (pronouns, relative time, fuzzy names) that require further pipeline resolution."
     )
@@ -63,7 +64,10 @@ True for ANY question about meetings: who attended, what was discussed, decision
 False ONLY for: greetings, general knowledge, math, or writing tasks with no meeting connection.
 Default: when uncertain, set True.
 
-# TODO (Memory Phase 2): Add STEP 4 - need_memory criteria to determine when to search long-term memory.
+STEP 4 — need_memory
+True if the query asks about the user's personal preferences, background, past experiences, or relationships.
+Example: "What do I like to drink?", "Who are my teammates?", "Do I have any background in AI?" -> True
+False if the query is strictly about factual meeting contents without personal background implication.
 
 Return valid JSON matching the schema.""",
     description="Decides whether to use query rewrite and RAG retrieval",

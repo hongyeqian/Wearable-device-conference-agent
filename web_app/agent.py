@@ -412,11 +412,6 @@ class FullRAGSystemAgent(BaseAgent):
             print("[Routing] Clearing pending state via state_delta before planner")
             yield self._make_event(state_delta=pending_clear_delta)
         
-        # TODO (Memory Phase 2): Query Mem0 for long-term user preferences
-        # if plan.need_memory:
-        #     user_memory_text = mem0_service.search_memories(user_id=current_user, query=user_query)
-        #     ctx.session.state["user_memory"] = user_memory_text
-        
         # Step 2: Run planner agent to decide need_rewrite / need_rag
         logger.info(f"[{self.name}] Running planner agent...")
         plan = await self._run_planner(ctx, user_query)
@@ -433,6 +428,18 @@ class FullRAGSystemAgent(BaseAgent):
             return
         
         logger.info(f"[{self.name}] Plan: need_rewrite={plan.need_rewrite}, need_rag={plan.need_rag}, reason={plan.reason}")
+        
+        # Step 2.5: Inject Long Term Memory if needed
+        long_term_context = ""
+        if getattr(plan, "need_memory", False):
+            logger.info(f"[{self.name}] Retrieving long-term memory...")
+            from src.memory.mem0_service import mem0_service
+            long_term_context = mem0_service.search_memories(
+                user_id=current_user, 
+                query=user_query,
+                limit=20
+            )
+        ctx.session.state["long_term_memory_context"] = long_term_context
         
         # Step 3: Process rewrite if needed
         rewrite_result = None
@@ -528,6 +535,7 @@ class FullRAGSystemAgent(BaseAgent):
                         continue
                     plan_dict = json.loads(response_text)
                     plan = Plan(
+                        need_memory=plan_dict.get("need_memory", False),
                         need_rewrite=plan_dict.get("need_rewrite", False),
                         need_rag=plan_dict.get("need_rag", True),
                         resolved_query=plan_dict.get("resolved_query", user_query),
@@ -542,7 +550,7 @@ class FullRAGSystemAgent(BaseAgent):
         
         # Fallback: default plan
         logger.warning(f"[{self.name}] Planner didn't return valid plan, using default")
-        return Plan(need_rewrite=False, need_rag=True, reason="Default: using RAG")
+        return Plan(need_memory=False, need_rewrite=False, need_rag=True, reason="Default: using RAG")
     
     async def _run_query_rewrite(self, query: str, current_user: str = ""):
         """

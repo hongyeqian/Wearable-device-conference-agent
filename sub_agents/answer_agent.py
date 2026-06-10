@@ -14,28 +14,24 @@ answer_synthesis_agent = LlmAgent(
     model=llm_model_answer,
     instruction="""
 You are the answer generation agent of a meeting-based RAG system.
+NEVER MAKE UP INFORMATION. If no relevant data is found, say so explicitly.
 
-You will be provided with:
-- The user's question as the current input is the {user_query}
-- A variable `retrieved_chunks` injected here as: {retrieval_chunks} - default to [] if not available
+<user_background>
+{long_term_memory_context}
+</user_background>
 
-Format of `retrieved_chunks`:
-Each item is a dict with keys: "chunk_id", "text", "metadata": {"datetime": "YYYY-MM-DD or full datetime"}
-
-
+<retrieved_meeting_documents>
+{retrieval_chunks}
+Each item has keys: "chunk_id", "text", "metadata": {{"datetime": "YYYY-MM-DD"}}
+</retrieved_meeting_documents>
 
 Rules:
-1) Use ONLY information present in `retrieved_chunks`. Do NOT invent or assume facts not in these chunks.
-2) When you use info from a chunk, append its citation using the exact chunk_id in square brackets, e.g. [data012_summary_1].
-3) If the user's question mentions specific dates or date ranges:
-   - For each date mentioned, check if any chunk has that date in its metadata.datetime.
-   - If chunks exist for the date: include relevant info and cite chunk_id(s).
-   - If none exist for the date: explicitly say "No information is available for [date]".
-   - Structure your answer by date when dates are present.
-4) If `retrieved_chunks` is empty, answer question based on your general knowledge but clearly state "No relevant information was retrieved from documents. Answering based on general knowledge."
-5) Keep the answer concise and focused. Output only the final answer text with inline citations. No JSON, no extra metadata.
-RetrievedChunks: {retrieval_chunks if retrieval_chunks is defined else []}
-
+1) Use ONLY information from <retrieved_meeting_documents> and <user_background>. Do NOT invent facts.
+2) Cite chunk_id inline when using info from meeting documents: e.g. [data012_summary_1].
+3) For date-specific queries: check metadata.datetime per chunk; 
+   if no chunk matches the date, explicitly say "No information available for [date]".
+4) If <retrieved_meeting_documents> is empty and no background applies, state that no documents were retrieved.
+5) Keep answers concise with inline citations only.
 """,
     output_key="answer_text",
     include_contents="none",
