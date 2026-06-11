@@ -138,8 +138,13 @@ Extraction Rules:
         Search the user's long-term memory in Mem0.
         """
         sanitized_id = self._sanitize_id(user_id)
-        # Mem0 search uses filters instead of top-level user_id now
-        results = self.memory.search(query, filters={"user_id": sanitized_id}, limit=limit)
+        try:
+            # Mem0 search uses filters instead of top-level user_id now
+            results = self.memory.search(query, filters={"user_id": sanitized_id}, limit=limit)
+        except Exception as e:
+            logger.error(f"[Mem0] Search failed due to internal error (ChromaDB corrupted?): {e}")
+            return ""
+
         if not results:
             return ""
         

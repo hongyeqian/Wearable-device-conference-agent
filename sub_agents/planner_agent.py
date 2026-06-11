@@ -1,4 +1,5 @@
 """
+# DEPRECATED: replaced by router_planner.py
 Planner Agent - Decides whether to use query rewrite and RAG
 """
 from pydantic import BaseModel, Field

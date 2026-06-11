@@ -39,11 +39,13 @@ from src.retrieval.vector_store_utils import VectorStoreUtilsMixin
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
 
 from sub_agents.query_rewriter_agent import rewrite_query_async, get_last_pandas_query_result
-from sub_agents.planner_agent import planner_agent, Plan
-
-# code luping
-from sub_agents.intent_router import route_intent
-from skills.registry import dispatch as skill_dispatch
+from sub_agents.router_planner import (
+    router_planner_agent,
+    RouterPlannerDecision,
+    check_pending_action,
+    build_skills_text,
+)
+from skills.registry import dispatch as skill_dispatch, get_enabled_skills
 from sub_agents import short_memory
 
 
@@ -230,23 +232,19 @@ class FullRAGSystemAgent(BaseAgent):
     retriever: Optional[HierarchicalRetriever] = Field(default=None)
     total_meetings: int = Field(default=0)
     all_meeting_ids: Set[str] = Field(default_factory=set)
-    answer_synthesis_agent: Any = Field(default=None)  # For integrated answer generation
-    
-    # Model config for Pydantic
+    intent_router: Any = Field(default=None)
     model_config = {"arbitrary_types_allowed": True}
     
     def __init__(self, name: str = "FullRAGSystemAgent"):
         """
         Initialize the FullRAGSystemAgent.
         - Initializes RAG components immediately (not as tool)
-        - Sets up planner agent reference
+        - Sets up IntentRouter reference
         """
-        # Call parent __init__ FIRST to initialize Pydantic fields
-        super().__init__(name=name, sub_agents=[planner_agent])
+        # Register IntentRouter as sub-agent so ADK manages its lifecycle
+        super().__init__(name=name, sub_agents=[intent_router])
         
-        # Initialize answer synthesis agent (for integrated answer generation)
-        from sub_agents.answer_agent import answer_synthesis_agent as answer_agent
-        self.answer_synthesis_agent = answer_agent
+        self.intent_router = intent_router
         
         # Lock for thread-safe incremental sync (hot reload)
         self._sync_lock = threading.Lock()
@@ -291,27 +289,24 @@ class FullRAGSystemAgent(BaseAgent):
         Main execution logic for the RAG agent.
         1. Extract query
         2. Resolve user dynamically (ADK Native)
-        3. Run orchestration pipeline
+        3. Delegate entirely to the ReAct IntentRouter
         """
         # Step 0: Extract user query and resolve user identity
         user_query = ""
         if ctx.user_content and ctx.user_content.parts:
             user_query = ctx.user_content.parts[0].text or ""
             
-        # Resolve current user from ADK InvocationContext (userId from API/Web UI)
         raw_user_id = ctx.user_id
         current_user = self._match_user_folder(raw_user_id)
         
-        # Store in session state for other components (QueryRewriter, Retrieval)
+        # Store in session state for other components
         ctx.session.state["CURRENT_USER"] = current_user
         ctx.session.state["user_query"] = user_query
         
         logger.info(f"[{self.name}] User ID: '{raw_user_id}' -> Matched Folder: '{current_user}'")
-        logger.info(f"[{self.name}] Processing query: {user_query[:100]}...")
+        logger.info(f"[{self.name}] Delegating query to IntentRouter: {user_query[:100]}...")
         
-        # Step 1: Get user query from state (set by the runner)
         if not user_query:
-            logger.warning(f"[{self.name}] No user_query found in state")
             yield Event(
                 author=self.name,
                 content=types.Content(
@@ -320,424 +315,13 @@ class FullRAGSystemAgent(BaseAgent):
                 )
             )
             return
-        
-        logger.info(f"[{self.name}] Processing query: {user_query}")
 
-        # luping's code
-        # ----------------------------------------------------------------- #
-        # Unified routing decision
-        # ----------------------------------------------------------------- #
-        # 1. Build short context from session state
-        # 2. Ask intent_router for a single routing decision
-        # 3. Execute the decision (pending_action / skill / planner)
-        short_context = short_memory.get_short_context(ctx)
-        print(
-            f"[Routing] Start of turn. session.state keys: {list(ctx.session.state.keys())}, "
-            f"pending={'present' if short_context.get('pending_confirmation') else 'None'}"
-        )
-        decision = route_intent(user_query, short_context)
-        print(
-            f"[Routing] decision: route_type={decision['route_type']!r}, "
-            f"source={decision.get('router_source')!r}"
-        )
-        route_type = decision["route_type"]
-
-        # ----------------------------------------------------------------- #
-        # Branch A — pending_action (confirm / reject / unclear / override)
-        # ----------------------------------------------------------------- #
-        if route_type == "pending_action":
-            response_text, state_delta = self._execute_pending_action(decision)
-            yield self._make_event(text=response_text, state_delta=state_delta)
-            return
-
-        # For skill / planner branches, optionally clear a stale pending first.
-        pending_clear_delta: Optional[Dict[str, Any]] = (
-            {"pending_confirmation": None} if decision.get("pending_to_clear") else None
-        )
-        if pending_clear_delta:
-            print("[Routing] new_request from pending — will clear pending state")
-
-        # ----------------------------------------------------------------- #
-        # Branch B — skill dispatch
-        # ----------------------------------------------------------------- #
-        if route_type == "skill":
-            skill_name = decision["skill_name"]
-            logger.info(
-                f"[IntentRouter] Matched skill '{skill_name}' "
-                f"(score={decision['score']:.2f}, confidence={decision['confidence']}, "
-                f"source={decision.get('router_source')})"
-            )
-            try:
-                skill_result = skill_dispatch(skill_name, user_query)
-            except Exception as exc:
-                logger.error(f"[IntentRouter] Skill dispatch error: {exc}")
-                skill_result = {"status": "error", "text_output": f"Skill error: {exc}"}
-
-            if skill_result.get("status") == "error":
-                logger.error(
-                    f"[IntentRouter] Skill '{skill_name}' returned error: {skill_result.get('error')}"
-                )
-
-            # In-turn flags read by answer_synthesis_agent's before_agent_callback
-            print(f"[SkillOutputGuard] Set protected_skill_output for skill={skill_name!r}")
-
-            new_pending = short_memory.build_pending_confirmation(
-                skill_name=skill_name,
-                user_query=user_query,
-                skill_result=skill_result,
-            )
-            combined_delta: Dict[str, Any] = dict(pending_clear_delta or {})
-            combined_delta["preserve_skill_output_format"] = True
-            combined_delta["protected_skill_output"] = skill_result
-            combined_delta["protected_skill_name"] = skill_name
-            if new_pending is not None:
-                combined_delta["pending_confirmation"] = new_pending
-                print(
-                    f"[ShortMemory] Stored pending confirmation via state_delta: "
-                    f"type={new_pending['type']!r}, skill={skill_name!r}"
-                )
-            text_output = skill_result.get("text_output") or "(Skill executed but returned no text output)"
-            logger.info(f"[IntentRouter] Returning skill output, skipping planner/RAG/answer pipeline")
-            yield self._make_event(text=text_output, state_delta=combined_delta or None)
-            return
-
-        # ----------------------------------------------------------------- #
-        # Branch C — planner / RAG fallback (route_type == "planner")
-        # ----------------------------------------------------------------- #
-        logger.info(
-            f"[IntentRouter] No skill matched, falling back to planner/RAG "
-            f"(reason: {decision['reason']})"
-        )
-        if pending_clear_delta:
-            print("[Routing] Clearing pending state via state_delta before planner")
-            yield self._make_event(state_delta=pending_clear_delta)
-        
-        # Step 2: Run planner agent to decide need_rewrite / need_rag
-        logger.info(f"[{self.name}] Running planner agent...")
-        plan = await self._run_planner(ctx, user_query)
-        
-        if not plan:
-            logger.error(f"[{self.name}] Planner failed to produce a plan")
-            yield Event(
-                author=self.name,
-                content=types.Content(
-                    role="assistant",
-                    parts=[types.Part(text="Error: Failed to analyze query.")]
-                )
-            )
-            return
-        
-        logger.info(f"[{self.name}] Plan: need_rewrite={plan.need_rewrite}, need_rag={plan.need_rag}, reason={plan.reason}")
-        
-        # Step 2.5: Inject Long Term Memory if needed
-        long_term_context = ""
-        if getattr(plan, "need_memory", False):
-            logger.info(f"[{self.name}] Retrieving long-term memory...")
-            from src.memory.mem0_service import mem0_service
-            long_term_context = mem0_service.search_memories(
-                user_id=current_user, 
-                query=user_query,
-                limit=20
-            )
-        ctx.session.state["long_term_memory_context"] = long_term_context
-        
-        # Step 3: Process rewrite if needed
-        rewrite_result = None
-        if plan.need_rewrite:
-            logger.info(f"[{self.name}] Running query rewrite...")
-            query_to_rewrite = plan.resolved_query if plan.resolved_query else user_query
-            # Pass current_user to query rewriter
-            rewrite_result = await self._run_query_rewrite(query_to_rewrite, current_user=ctx.session.state["CURRENT_USER"])
-            if rewrite_result:
-                ctx.session.state["rewrite_result"] = {
-                    "rewritten_query": rewrite_result.rewritten_query,
-                    "relevant_meeting_ids": rewrite_result.relevant_meeting_ids
-                }
-                logger.info(f"[{self.name}] Rewrite result: {rewrite_result.rewritten_query}")
-                # --- Debug: Print relevant meeting IDs ---
-                ids = rewrite_result.relevant_meeting_ids
-                print(f"\n{'🔎' * 10}")
-                print(f"📋 Relevant Meeting IDs ({len(ids)}): {ids if ids else 'None'}")
-                print(f"{'🔎' * 10}")
-            else:
-                logger.warning(f"[{self.name}] Query rewrite failed, using original query")
-        
-        # Step 4: Run RAG retrieval if needed
-        if plan.need_rag:
-            logger.info(f"[{self.name}] Running RAG retrieval...")
-            # Determine which query to use for retrieval
-            if rewrite_result:
-                retrieval_query = rewrite_result.rewritten_query
-                relevant_meeting_ids = rewrite_result.relevant_meeting_ids
-            else:
-                retrieval_query = plan.resolved_query if plan.resolved_query else user_query
-                relevant_meeting_ids = []
-            
-            retrieval_chunks = await self._run_retrieval(
-                ctx=ctx,
-                query=retrieval_query,
-                relevant_meeting_ids=relevant_meeting_ids
-            )
-            
-            ctx.session.state["retrieval_chunks"] = retrieval_chunks
-            logger.info(f"[{self.name}] Retrieved {len(retrieval_chunks)} chunks")
-            # --- Debug: Print truncated chunk previews ---
-            print(f"\n{'📎' * 10}")
-            print(f"📦 Retrieved Chunks ({len(retrieval_chunks)}):")
-            for i, chunk in enumerate(retrieval_chunks, 1):
-                cid = chunk.get('chunk_id', 'N/A')
-                dt = chunk.get('metadata', {}).get('datetime', 'N/A')
-                text = chunk.get('text', '')
-                # First sentence + ... + last sentence
-                sentences = [s.strip() for s in text.replace('\n', ' ').split('.') if s.strip()]
-                if len(sentences) <= 2:
-                    preview = text[:200]
-                else:
-                    preview = f"{sentences[0]}...{sentences[-1]}."
-                print(f"  [{i}] {cid} | {dt}")
-                print(f"      {preview}")
-            print(f"{'📎' * 10}")
-        else:
-            # When RAG is not needed, still set empty chunks for answer agent
-            ctx.session.state["retrieval_chunks"] = []
-            logger.info(f"[{self.name}] No RAG needed, setting empty chunks")
-        
-        # Step 5: Run answer synthesis agent to generate final answer
-        logger.info(f"[{self.name}] Running answer synthesis agent...")
-        async for event in self.answer_synthesis_agent.run_async(ctx):
-            # Pass through events from answer agent
+        # Delegate the entire turn to the new IntentRouter
+        async for event in self.intent_router.run_async(ctx):
             yield event
-        
-        # Final event is yielded by answer_agent, no need for additional yield
     
-    async def _run_planner(self, ctx: InvocationContext, user_query: str) -> Plan:
-        """
-        Run the planner agent to decide need_rewrite and need_rag.
-        """
-        # Store user_query in state for planner to access
-        ctx.session.state["user_query"] = user_query
-        
-        # Run the planner agent and get events
-        # NOTE: Do NOT return early inside the async for loop.
-        # Early return causes GeneratorExit → OpenTelemetry context detach errors.
-        # Instead, store the result and break to let the generator close naturally.
-        plan = None
-        async for event in planner_agent.run_async(ctx):
-            # Check if this is the final response
-            if event.is_final_response() and event.content and event.content.parts:
-                response_text = event.content.parts[0].text
-                logger.info(f"[{self.name}] Planner final response: {response_text}")
-                
-                # Parse JSON from the response text
-                try:
-                    if not response_text:
-                        logger.error(f"[{self.name}] Planner response text is empty")
-                        continue
-                    plan_dict = json.loads(response_text)
-                    plan = Plan(
-                        need_memory=plan_dict.get("need_memory", False),
-                        need_rewrite=plan_dict.get("need_rewrite", False),
-                        need_rag=plan_dict.get("need_rag", True),
-                        resolved_query=plan_dict.get("resolved_query", user_query),
-                        reason=plan_dict.get("reason", "")
-                    )
-                    logger.info(f"[{self.name}] Parsed plan from response: {plan}")
-                except json.JSONDecodeError as e:
-                    logger.error(f"[{self.name}] Failed to parse plan JSON: {response_text}, error: {e}")
-        
-        if plan:
-            return plan
-        
-        # Fallback: default plan
-        logger.warning(f"[{self.name}] Planner didn't return valid plan, using default")
-        return Plan(need_memory=False, need_rewrite=False, need_rag=True, reason="Default: using RAG")
-    
-    async def _run_query_rewrite(self, query: str, current_user: str = ""):
-        """
-        Run the three-stage query rewrite pipeline.
-        """
-        try:
-            result = await rewrite_query_async(query, current_user=current_user)
-            
-            # Fallback: extract meeting_ids from pandas_query result if missing
-            if result.relevant_meeting_ids:
-                pass  # Already has meeting_ids
-            elif result.rewritten_query != query:
-                # Try to extract from pandas_query result
-                last_query_result = get_last_pandas_query_result()
-                if last_query_result and "meeting_ids" in last_query_result:
-                    extracted_ids = last_query_result.get("meeting_ids", [])
-                    if extracted_ids:
-                        logger.info(f"[{self.name}] Extracted meeting_ids from pandas_query: {extracted_ids}")
-                        result.relevant_meeting_ids = extracted_ids
-            
-            logger.info(f"[{self.name}] Query rewrite complete: {query} -> {result.rewritten_query}")
-            return result
-            
-        except Exception as e:
-            logger.error(f"[{self.name}] Query rewrite error: {e}")
-            return None
-    
-    async def _run_retrieval(
-        self,
-        ctx: InvocationContext,
-        query: str,
-        relevant_meeting_ids: List[str],
-        top_k: int = 10
-    ) -> List[Dict[str, Any]]:
-        """
-        Run the retrieval process.
-        """
-        try:
-            # Ensure retriever is initialized
-            if self.retriever is None:
-                logger.error(f"[{self.name}] Retriever not initialized!")
-                return []
-            
-            # Base security filter: current user's visible meetings
-            from sub_agents.metadata_manager import get_meetings_metadata
-            current_user = ctx.session.state.get("CURRENT_USER", "")
-            mdf = get_meetings_metadata(current_user)
-            user_records = mdf.records
-            all_visible_ids = set(r["meeting_id"] for r in user_records) if user_records else set()
-            
-            # Use meeting_ids filter if available, intersect with visible ids
-            if relevant_meeting_ids:
-                meeting_ids_filter = set(relevant_meeting_ids).intersection(all_visible_ids)
-            else:
-                meeting_ids_filter = all_visible_ids
-                
-            if not meeting_ids_filter:
-                logger.info(f"[{self.name}] No visible meetings match the query filters.")
-                return []
-            
-            
-            # Perform search (meeting_ids_filter is always provided now)
-            results = self.retriever.vector_store.search_with_meeting_ids_filter(
-                query_text=query,
-                level='summary',
-                meeting_ids=meeting_ids_filter,
-                top_k=top_k * 2
-            )
-            
-            # Extract hits from results
-            if isinstance(results, dict):
-                hits = results.get("hits")
-                if isinstance(hits, list):
-                    results = hits
-            
-            # Sort and limit results
-            chunks = sorted(results, key=lambda x: x.get("hybrid_score", 0), reverse=True)[:top_k]
-            
-            # Format chunks
-            clean_chunks = [
-                {
-                    "chunk_id": c.get("chunk_id"),
-                    "text": c.get("text"),
-                    "metadata": {"datetime": c.get("metadata", {}).get("datetime", "N/A")},
-                }
-                for c in chunks
-            ]
-            
-            return clean_chunks
-            
-        except Exception as e:
-            logger.error(f"[{self.name}] Retrieval error: {e}")
-            return []
 
 
-
-    # luping's code
-    def _make_event(
-        self,
-        *,
-        text: Optional[str] = None,
-        state_delta: Optional[Dict[str, Any]] = None,
-    ) -> Event:
-        """
-        Build an ADK Event without ever passing actions=None to the constructor.
-        ADK's pydantic Event schema rejects an explicit None for `actions` —
-        the field must either be omitted or be a real EventActions instance.
-        This helper centralises that rule so callers do not have to remember it.
-        """
-        kwargs: Dict[str, Any] = {"author": self.name}
-        if text is not None:
-            kwargs["content"] = types.Content(
-                role="assistant",
-                parts=[types.Part(text=text)],
-            )
-        if state_delta:
-            kwargs["actions"] = EventActions(state_delta=state_delta)
-        return Event(**kwargs)
-
-    def _execute_pending_action(self, decision: Dict[str, Any]) -> tuple:
-        """
-        Execute a route_type='pending_action' decision from the Intent Router.
-        Returns (response_text, state_delta).
-            state_delta is None when pending should be kept (unclear / override-no-match),
-            otherwise {"pending_confirmation": None} to clear it.
-        """
-        from skills.send_email import send_meeting_notification
-
-        pending = decision["pending"]
-        action = decision["action"]
-        CLEAR: Dict[str, Any] = {"pending_confirmation": None}
-
-        if action == "confirm":
-            print("[Routing] pending_action.confirm — sending notification, clearing pending")
-            return send_meeting_notification(pending), CLEAR
-
-        if action == "confirm_with_recipient_override":
-            raw_names = decision.get("recipient_override") or []
-            validated = short_memory._match_participants(
-                raw_names, pending.get("participants", [])
-            )
-            if not validated:
-                all_str = ", ".join(pending.get("participants", [])) or "the participants"
-                unrecognized = ", ".join(raw_names) if raw_names else "the specified recipient"
-                print(
-                    f"[Routing] confirm_with_recipient_override but validated=[]; keep pending "
-                    f"(raw_names={raw_names!r})"
-                )
-                return (
-                    f"I couldn't find {unrecognized} in the pending meeting participants. "
-                    f"Please choose from: {all_str}.",
-                    None,
-                )
-            print(f"[Routing] confirm_with_recipient_override — sending to {validated!r}")
-            pending_for_email = dict(pending)
-            pending_for_email["participants"] = validated
-            return send_meeting_notification(pending_for_email), CLEAR
-
-        if action == "reject":
-            participants_str = (
-                ", ".join(pending.get("participants", [])) or "the participants"
-            )
-            print("[Routing] pending_action.reject — clearing pending")
-            return (
-                f"Understood. Email notifications will not be sent to {participants_str}.",
-                CLEAR,
-            )
-
-        if action == "unclear":
-            title = pending.get("title", "the meeting")
-            participants_str = (
-                ", ".join(pending.get("participants", [])) or "the participants"
-            )
-            print("[Routing] pending_action.unclear — keeping pending")
-            return (
-                f"I'm not sure whether you'd like to send email notifications for "
-                f"'{title}' to {participants_str}. "
-                f"Please reply with 'yes' to send or 'no' to skip.",
-                None,
-            )
-
-        # Defensive fallback for an unknown pending action
-        print(f"[Routing] WARNING: unknown pending action={action!r} — clearing pending")
-        return (
-            f"(Internal) Unknown pending action: {action}. Pending state cleared.",
-            CLEAR,
-        )
 
 
 
@@ -1041,7 +625,6 @@ class FullRAGSystemAgent(BaseAgent):
 
 
 # Create the root agent for Google ADK
-# FullRAGSystemAgent now includes answer_synthesis_agent internally
 root_agent = FullRAGSystemAgent(name="FullRAGSystemAgent")
 
 # Pre-load all lazy-initialized NLP components (spaCy, Presidio, pandas, embeddings)

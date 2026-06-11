@@ -1,9 +1,8 @@
 """
+# DEPRECATED: replaced by router_planner.py
 Intent Router
 -------------
 Unified routing decision maker.
-
-Inputs
 ------
 - user_query (str)
 - short_context (dict | None) — see sub_agents.short_memory.get_short_context()

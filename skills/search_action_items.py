@@ -1,4 +1,5 @@
 """
+# DEPRECATED: removed from registry. This file is kept for reference only.
 Skill: search_action_items
 --------------------------
 Answers queries like:
