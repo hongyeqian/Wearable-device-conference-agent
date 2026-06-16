@@ -260,7 +260,9 @@ CRITICAL RULES for QA:
         FunctionTool(execute_email), 
         FunctionTool(draft_meeting), 
         FunctionTool(execute_meeting), 
-        FunctionTool(query_user_memory)
+        FunctionTool(query_user_memory),
     ],
     sub_agents=[qa_specialist],
 )
+
+# the new planner agent into an ReAct Agent (1. observation 2, thinking 4. actioning as a loop)

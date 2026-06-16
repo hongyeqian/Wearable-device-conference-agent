@@ -38,15 +38,8 @@ from src.chunking.chunker import HierarchicalChunker
 from src.retrieval.vector_store_utils import VectorStoreUtilsMixin
 from src.retrieval.hierarchical_retriever import HierarchicalRetriever
 
-from sub_agents.query_rewriter_agent import rewrite_query_async, get_last_pandas_query_result
-from sub_agents.router_planner import (
-    router_planner_agent,
-    RouterPlannerDecision,
-    check_pending_action,
-    build_skills_text,
-)
-from skills.registry import dispatch as skill_dispatch, get_enabled_skills
-from sub_agents import short_memory
+# Import the new Intent Router
+from web_app.tools import intent_router
 
 
 # Configure logging
@@ -639,7 +632,7 @@ compaction_llm = LiteLlm(
 )
 
 compaction_config = EventsCompactionConfig(
-    compaction_interval=1,
+    compaction_interval=3,
     overlap_size=1,
     summarizer=LlmEventSummarizer(llm=compaction_llm)
 )
