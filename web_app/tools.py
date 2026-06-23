@@ -199,15 +199,12 @@ async def prepare_qa_context(*, callback_context: CallbackContext, **kwargs):
     callback_context.state["long_term_memory_context"] = long_term_context
 
 
-llm_model = LiteLlm(
-    model=OPENAI_MODEL or "gpt-4o-mini",
-    api_key=OPENAI_API_KEY,
-)
+# ---------------------------------------------------------------------------
+# Instruction strings — defined as module-level constants so the eval factory
+# can reuse them without duplicating text.
+# ---------------------------------------------------------------------------
 
-qa_specialist = LlmAgent(
-    name="QA_Specialist",
-    model=llm_model,
-    instruction="""
+QA_INSTRUCTION = """\
 You are the QA specialist of a meeting-based RAG system.
 NEVER MAKE UP INFORMATION. If no relevant data is found, say so explicitly.
 
@@ -217,7 +214,7 @@ NEVER MAKE UP INFORMATION. If no relevant data is found, say so explicitly.
 
 <retrieved_meeting_documents>
 {retrieval_chunks}
-Each item has keys: "chunk_id", "text", "metadata": {{"datetime": "YYYY-MM-DD"}}
+Each item has keys: "chunk_id", "text", "metadata": {"datetime": "YYYY-MM-DD"}
 </retrieved_meeting_documents>
 
 Rules:
@@ -225,19 +222,9 @@ Rules:
 2) Cite chunk_id inline when using info from meeting documents: e.g. [data012_summary_1].
 3) For date-specific queries: check metadata.datetime per chunk; if no chunk matches, explicitly say "No information available for [date]".
 4) Keep answers concise with inline citations only.
-""",
-    description="Specialist for answering questions about past meetings, discussions, action items, or meeting summaries. Delegate to this agent when the user asks a factual question about meetings.",
-    before_agent_callback=prepare_qa_context,
-)
+"""
 
-# ---------------------------------------------------------------------------
-# Intent Router (Main ReAct Agent)
-# ---------------------------------------------------------------------------
-
-intent_router = LlmAgent(
-    name="IntentRouter",
-    model=llm_model,
-    instruction="""
+ROUTER_INSTRUCTION = """\
 You are a highly intelligent ReAct (Reasoning & Acting) assistant.
 Your job is to help users manage meetings, answer questions, and send emails.
 
@@ -254,7 +241,29 @@ CRITICAL RULES for execution (Human-in-the-loop):
 
 CRITICAL RULES for QA:
 - Do not try to answer meeting questions from your own knowledge. ALWAYS delegate to the QA_Specialist.
-""",
+"""
+
+llm_model = LiteLlm(
+    model=OPENAI_MODEL or "gpt-4o-mini",
+    api_key=OPENAI_API_KEY,
+)
+
+qa_specialist = LlmAgent(
+    name="QA_Specialist",
+    model=llm_model,
+    instruction=QA_INSTRUCTION,
+    description="Specialist for answering questions about past meetings, discussions, action items, or meeting summaries. Delegate to this agent when the user asks a factual question about meetings.",
+    before_agent_callback=prepare_qa_context,
+)
+
+# ---------------------------------------------------------------------------
+# Intent Router (Main ReAct Agent)
+# ---------------------------------------------------------------------------
+
+intent_router = LlmAgent(
+    name="IntentRouter",
+    model=llm_model,
+    instruction=ROUTER_INSTRUCTION,
     tools=[
         FunctionTool(draft_email), 
         FunctionTool(execute_email), 
@@ -265,4 +274,52 @@ CRITICAL RULES for QA:
     sub_agents=[qa_specialist],
 )
 
-# the new planner agent into an ReAct Agent (1. observation 2, thinking 4. actioning as a loop)
+
+# ---------------------------------------------------------------------------
+# Eval factory — create a fresh App with any backbone LLM
+# ---------------------------------------------------------------------------
+
+def create_eval_app(litellm_model: LiteLlm) -> "App":
+    """
+    Create a fresh App instance that is **functionally identical to production**
+    but uses the provided LiteLlm model as the backbone.
+
+    Called exclusively by eval/phase4_judge.py to compare GPT / Qwen / DeepSeek.
+    The FAISS retriever is shared via the root_agent singleton (already initialised
+    when web_app.agent is imported), so no extra indexing is done.
+
+    Uses ADK factory-function pattern (fresh instances) to avoid the
+    "agent already has a parent" error.
+
+    Args:
+        litellm_model: A configured LiteLlm instance for the model under test.
+
+    Returns:
+        An App ready to be wrapped in a Runner + InMemorySessionService.
+    """
+    from google.adk.apps.app import App
+
+    _qa = LlmAgent(
+        name="QA_Specialist",
+        model=litellm_model,
+        instruction=QA_INSTRUCTION,
+        description=(
+            "Specialist for answering questions about past meetings, discussions, "
+            "action items, or meeting summaries. Delegate here for factual meeting questions."
+        ),
+        before_agent_callback=prepare_qa_context,   # same callback → same retrieval logic
+    )
+    _router = LlmAgent(
+        name="IntentRouter",
+        model=litellm_model,
+        instruction=ROUTER_INSTRUCTION,
+        tools=[
+            FunctionTool(draft_email),
+            FunctionTool(execute_email),
+            FunctionTool(draft_meeting),
+            FunctionTool(execute_meeting),
+            FunctionTool(query_user_memory),
+        ],
+        sub_agents=[_qa],
+    )
+    return App(name="web_app", root_agent=_router)

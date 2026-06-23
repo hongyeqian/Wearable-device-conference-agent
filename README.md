@@ -1,224 +1,327 @@
-# Meeting Transcript RAG System
+﻿# Meeting Intelligence RAG System
 
-A Retrieval-Augmented Generation (RAG) system for meeting transcript question answering.
+This repository contains a meeting-centric Retrieval-Augmented Generation (RAG) system built on Google ADK. It loads meeting records from a local data directory, builds a searchable hybrid index, rewrites ambiguous user queries, retrieves relevant meeting context, and answers through an ADK web app.
 
-## Project Overview
+The current production path is centered on:
 
-This system is designed specifically for processing meeting transcript data, providing the following core features:
+- `run_server.py`
+- `web_app/agent.py`
+- `web_app/tools.py`
 
-- **Hierarchical Document Chunking**: Multi-level chunking for metadata, summaries, and meeting content
-- **Hybrid Retrieval**: Combines vector search (FAISS) and BM25 keyword search
-- **Modular Agents**: Decoupled sub-agent design for query rewriting, answer generation, and task planning
-- **Web Interface**: Interactive web interface based on Google ADK
+This README documents the system as it exists now.
 
-## Directory Structure
+## What the system does
 
+- Answers questions about past meetings
+- Rewrites ambiguous meeting queries into retrievable forms
+- Enforces per-user meeting visibility through metadata filtering
+- Supports hot reload when new meeting folders are added
+- Stores long-term user memory for personalization
+- Exposes the system through a Google ADK web server
+
+## Current architecture
+
+### Runtime entrypoint
+
+The recommended server entrypoint is:
+
+- `run_server.py`
+
+It does three things before serving traffic:
+
+1. Imports `web_app.agent`
+2. Forces RAG initialization and NLP warmup
+3. Starts the file-system watcher for incremental indexing
+
+### Main runtime modules
+
+- `web_app/agent.py`  
+  Owns the root ADK agent, RAG initialization, vector-store loading, compaction plugin setup, and hot-reload watcher startup.
+
+- `web_app/tools.py`  
+  Defines the actual user-facing runtime behavior:
+  - QA sub-agent
+  - intent router
+  - email draft/send tools
+  - meeting draft/schedule tools
+  - long-term memory lookup
+
+- `src/data_loader/loader.py`  
+  Loads meeting folders from `datademo/<user>/con*` and generates `summary_metadata.json`.
+
+- `src/chunking/chunker.py`  
+  Converts loaded meetings into chunk objects for indexing.
+
+- `src/retrieval/vector_store.py`  
+  Provides hybrid retrieval using FAISS plus BM25.
+
+- `src/retrieval/vector_store_utils.py`  
+  Persists and reloads the local vector store.
+
+- `sub_agents/query_rewriter_agent.py`  
+  Rewrites ambiguous queries by resolving people, dates, and meeting references.
+
+- `sub_agents/metadata_manager.py`  
+  Maintains per-user meeting metadata and enforces visibility filters.
+
+- `src/watcher/meeting_watcher.py`  
+  Watches the data directory and triggers incremental indexing for new meetings.
+
+- `src/memory/mem0_service.py`  
+  Stores and retrieves long-term user memory.
+
+## High-level architecture
+
+```text
+User
+  ↓
+ADK Web UI
+  ↓
+run_server.py
+  ↓
+web_app/agent.py
+  ├─ initialize DataLoader + Chunker + Vector Store + Retriever
+  ├─ warm up query rewriting and NLP components
+  ├─ start MeetingWatcher
+  └─ delegate each request to intent_router in web_app/tools.py
+       ├─ QA path
+       │   ├─ rewrite_query_async(...)
+       │   ├─ metadata-based meeting filtering
+       │   ├─ hybrid retrieval from vector store
+       │   └─ answer synthesis with citations
+       ├─ memory lookup path
+       ├─ email draft/send path
+       └─ meeting draft/schedule path
 ```
-DevelopmentRAG/
-├── datademo/                    # Meeting data directory
-│   └── conXXX/                  # Each meeting folder (con1, con2, ...)
-│       ├── metaDataXXX.json     # Meeting metadata
-│       ├── dataXXX.md          # Raw meeting transcript
-│       ├── meetLevelXXX.md     # Topic-level structured content
-│       └── summaryXXX.md       # Meeting summary
-│
-├── src/                        # Core implementation
-│   ├── data_loader/
-│   │   └── loader.py           # Load and normalize data from datademo
-│   ├── chunking/
-│   │   └── chunker.py          # Hierarchical document chunking
-│   ├── embeddings/
-│   │   └── generator.py        # Generate vector embeddings
-│   └── retrieval/
-│       ├── hierarchical_retriever.py    # Main retrieval logic
-│       ├── vector_store.py              # Hybrid vector store (FAISS + BM25)
-│       └── vector_store_utils.py        # Vector store utilities
-│
-├── sub_agents/                 # Sub-agent modules
-│   ├── query_rewriter_agent.py # Query rewriting agent (three-stage process)
-│   ├── answer_agent.py         # Answer generation agent
-│   ├── planner_agent.py        # Task planning agent
-│   ├── pandas_utils.py         # Data processing utilities
-│   ├── date_resolver.py        # Date resolution
-│   └── person_matcher.py       # Person name matching
-│
-├── web_app/                    # Web interface
-│   └── agent.py               # Google ADK Web Agent
-│
-├── config/                     # Configuration
-│   ├── settings.py            # System configuration
-│   └── .env                   # Environment variables (API keys, etc.)
-│
-├── generate/                   # Data generation scripts
-├── test_set/                  # Test cases
-└── requirements.txt            # Dependencies list
+
+## Data model and on-disk layout
+
+Meeting data is expected under:
+
+```text
+datademo/
+  <user_name>/
+    con1/
+    con2/
+    ...
 ```
 
-## Quick Start
+Each `con*` folder must contain the four source files the watcher expects:
 
-### 1. Environment Setup
+- `metaData*.json`
+- `data*.md`
+- `meetLevel*.md`
+- `summary*.md`
 
-#### 1.1 Create Virtual Environment (Windows)
+During loading, the system also generates:
 
-```bash
-# Create virtual environment
+- `summary_metadata.json`
+
+That generated file is used later for user-scoped metadata filtering and query rewriting.
+
+## Data flow
+
+### 1. Startup indexing flow
+
+On startup, `web_app/agent.py` initializes the RAG stack:
+
+1. `DataLoader` loads all meetings from `datademo`
+2. `HierarchicalChunker` builds chunks
+3. Existing vector store is loaded from `vector_store/` if present
+4. Only new meetings are chunked and indexed
+5. `HierarchicalRetriever` is created on top of the vector store
+6. Query rewriting dependencies are warmed up
+7. `MeetingWatcher` starts in the background
+
+### 2. Request flow
+
+For a typical meeting question:
+
+1. The root agent receives the user message
+2. The current user is resolved from ADK session context
+3. The request is delegated to the intent router in `web_app/tools.py`
+4. The QA agent callback runs `rewrite_query_async(...)`
+5. Metadata filtering computes which meetings the user may access
+6. Hybrid retrieval searches the indexed summaries
+7. Retrieved chunks are formatted and injected into the QA prompt
+8. The QA agent answers with inline chunk citations
+
+### 3. Hot-reload flow
+
+When a new `con*` folder appears:
+
+1. `MeetingWatcher` detects the new directory
+2. It waits until all required files exist and become stable
+3. `web_app/agent.py` performs incremental sync
+4. New chunks are added to the existing vector store
+5. User metadata caches are refreshed
+6. New meetings become queryable without rebuilding everything manually
+
+### 4. Long-term memory flow
+
+After compaction summaries are produced:
+
+1. Session summaries are passed to `mem0_service`
+2. High-value user facts are extracted
+3. Those facts are stored in the local Mem0-backed store
+4. Future requests can query those memories through a tool
+
+## Important implementation notes
+
+- The production QA path currently retrieves from the summary level by default.
+- `config/settings.py` sets `ONLY_SUMMARY=True`, so the active retrieval path is optimized around summary chunks.
+- `vector_store/` is a local persisted artifact, not source code.
+- `long_term_memory/`, `logs/`, `eval/logs/`, `__pycache__/`, and `.adk/` contain runtime artifacts.
+
+## Repository structure
+
+This is the part of the tree that matters most for the active system:
+
+```text
+.
+├─ run_server.py
+├─ requirements.txt
+├─ config/
+│  ├─ settings.py
+│  └─ meeting_patterns.py
+├─ datademo/
+├─ web_app/
+│  ├─ agent.py
+│  └─ tools.py
+├─ sub_agents/
+│  ├─ query_rewriter_agent.py
+│  ├─ metadata_manager.py
+│  ├─ person_matcher.py
+│  ├─ date_resolver.py
+│  └─ constants/
+├─ src/
+│  ├─ data_loader/
+│  ├─ chunking/
+│  ├─ embeddings/
+│  ├─ retrieval/
+│  ├─ watcher/
+│  └─ memory/
+└─ eval/
+```
+
+## Quick start
+
+### 1. Create a virtual environment
+
+Windows PowerShell:
+
+```powershell
 python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-# Activate virtual environment
-./.venv/Scripts/Activate.ps1    // conda environment cannot link openai use venv!!!
+### 2. Install dependencies
 
-# Install dependencies
+```powershell
 pip install -r requirements.txt
+```
 
-# Download spaCy language model (for Presidio privacy processing)， both need to download, if you do not want to download the large one, go to query_rewriter_agent.py change the  AnalyzerEngine()
+### 3. Install the spaCy model used at runtime
+
+```powershell
 python -m spacy download en_core_web_sm
-python -m spacy download en_core_web_lg
 ```
 
-#### 1.2 Configure Environment Variables
+### 4. Configure environment variables
 
-Create a `.env` file in the `config/` directory, do not forgot to build this, if do not build, system cannot run.
+Create `config/.env` with at least:
 
-```bash
-# OpenAI API configuration (required)
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Optional configuration
-OPENAI_MODEL=gpt-4o
+```env
+OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-4o-mini
 EMBEDDING_MODEL=text-embedding-3-small
-
-# Elasticsearch configuration (optional, FAISS is used by default)
-# ELASTICSEARCH_URL=http://localhost:9200
-# ELASTICSEARCH_USERNAME=your_username
-# ELASTICSEARCH_PASSWORD=your_password
 ```
 
-> **Note**: Please visit [OpenAI Platform](https://platform.openai.com/) to get your API key.
+Optional settings:
 
-### 2. Data Preparation
-
-Place your meeting data in the `datademo/conXXX/` directory. Each meeting requires the following four files:
-
-| File | Description | Example |
-|-----|-------------|---------|
-| `metaDataXXX.json` | Meeting metadata | participants, datetime, topics, meeting_id |
-| `dataXXX.md` | Raw meeting transcript | Timestamped dialogues or paragraphs |
-| `meetLevelXXX.md` | Topic-level structured content | Meeting content organized by topic |
-| `summaryXXX.md` | Meeting summary | High-level summary |
-
-Refer to the sample data in the `datademo/con1/` directory.
-
-### 3. Generate Vector Index
-
-Run the embedding generation script (refer to `src/embeddings/generator.py`):
-
-```bash
-# Example: Run data generation script
-python generate/your_embedding_script.py
+```env
+ELASTICSEARCH_URL=http://localhost:9200
+ELASTICSEARCH_USERNAME=
+ELASTICSEARCH_PASSWORD=
+CURRENT_USER=
 ```
 
-### 4. Start Web Service
+Notes:
 
-```bash
-# Start web interface using Google ADK
-adk web .
+- The current default user fallback is defined in `config/settings.py`.
+- Elasticsearch is optional; the active local path uses FAISS.
+
+### 5. Prepare meeting data
+
+Place data under:
+
+```text
+datademo/<user_name>/con*/
 ```
 
-After starting, access the displayed address in your browser (typically `http://localhost:8000`), select the Agent from the `web_app` directory, and you can start using the system.
+Each meeting folder should contain:
 
-## Core Modules
+- `metaData*.json`
+- `data*.md`
+- `meetLevel*.md`
+- `summary*.md`
 
-### 1. Data Loader (`src/data_loader/loader.py`)
+### 6. Start the server
 
-Responsible for loading meeting data from the `datademo/` directory and normalizing it into a unified document structure.
+Recommended:
 
-**Core Classes**:
-- `Meeting`: Meeting data model
-- `DataLoader`: Data loader
-
-### 2. Hierarchical Chunker (`src/chunking/chunker.py`)
-
-Chunks meeting documents hierarchically:
-- **Metadata Chunk**: Meeting participants, time, topics
-- **Summary Chunk**: High-level meeting summary
-- **Meeting Chunk**: Detailed meeting content
-
-**Configuration Parameters** (in `config/settings.py`):
-- `CHUNK_SIZE=800`: Chunk size
-- `CHUNK_OVERLAP=120`: Chunk overlap
-- `ONLY_SUMMARY=True`: Whether to process summary level only
-
-### 3. Vector Store (`src/retrieval/vector_store.py`)
-
-Hybrid retrieval implementation combining two methods:
-- **FAISS Vector Search**: Semantic similarity-based
-- **BM25 Keyword Search**: Term frequency-based
-
-### 4. Query Rewriter Agent (`sub_agents/query_rewriter_agent.py`)
-
-**Three-stage Query Rewriting Process**:
-
-```
-User's Original Query
-    │
-    ├─► Stage 1: Ambiguity Check (check_ambiguity)
-    │       Detects whether names, dates, etc. in the query are explicit
-    │       Example: "that meeting" → needs to determine which specific meeting
-    │
-    ├─► Stage 2: Replace ambiguity into true information
-    │       do simple replacement
-    │       Example: hongye -> hongye qian
-    │
-    └─► Stage 3: react llm to search pandas
-            Resolves meeting ambiguous information to specific entities
-            Example: "last three meetings" → "2025-11.30", "2025-11.29", "2025-11.21"
+```powershell
+python run_server.py
 ```
 
-**Core Functions**:
-- `check_ambiguity()`: Detect query ambiguity
-- `pandas_query()`: Generate Pandas query to get candidate meetings
-- `rewrite_query_async()`: Execute complete rewriting process asynchronously
+Optional custom host/port:
 
-### 5. Answer Agent (`sub_agents/answer_agent.py`)
-
-Merges retrieved contexts to generate final answers with citation sources.
-
-### 6. Planner Agent (`sub_agents/planner_agent.py`)
-
-Splits complex tasks into subtasks and coordinates multiple agents to complete complex queries.
-
-## Configuration Reference
-
-### Complete `.env` Example
-
-```bash
-# ========== OpenAI Configuration ==========
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-OPENAI_MODEL=gpt-4o
-EMBEDDING_MODEL=text-embedding-3-small
-
-# ========== Elasticsearch Configuration (Optional) ==========
-# ELASTICSEARCH_URL=http://localhost:9200
-# ELASTICSEARCH_USERNAME=elastic
-# ELASTICSEARCH_PASSWORD=your_password
-# ELASTICSEARCH_INDEX_PREFIX=meeting_rag
+```powershell
+python run_server.py --host 127.0.0.1 --port 8000
 ```
 
-### Core Configuration Items (`config/settings.py`)
+Then open the ADK web UI in your browser and interact with the app.
 
-| Configuration | Default | Description |
-|--------------|---------|-------------|
-| `CHUNK_SIZE` | 800 | Chunk size |
-| `CHUNK_OVERLAP` | 120 | Chunk overlap |
-| `ONLY_SUMMARY` | True | Process summary only |
-| `TOP_K_SUMMARY` | 3 | Number of summary retrievals |
-| `TOP_K_MEETING` | 3 | Number of meeting retrievals |
-| `TOP_K_CHUNK` | 5 | Number of content chunk retrievals |
+## Configuration
 
+Key configuration is defined in `config/settings.py`.
 
+Important values include:
 
-## Future Improvements1. **Query Rewriter Agent**: Introduce reward model to improve rewriting quality
-2. **Evaluation Framework**: Integrate RAGAs and other evaluation tools
-3. **Multi-modal Support**: Support audio and video meeting recordings
-4. **Enterprise Deployment**: Add authentication, rate limiting, and other production features
-5. conside to use mapping knowledge domain## LicenseMIT License
+- `DATA_DIR`
+- `VECTOR_STORE_DIR`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `EMBEDDING_MODEL`
+- `CHUNK_SIZE`
+- `CHUNK_OVERLAP`
+- `ONLY_SUMMARY`
+- `DEFAULT_USER`
+
+## Evaluation
+
+The repository also includes an evaluation pipeline under `eval/`.
+
+This is not required to run the app, but it is useful for:
+
+- QA dataset generation
+- model comparison
+- judgment and reporting
+
+The eval path uses `web_app/tools.py:create_eval_app(...)` to build production-like apps for model testing.
+
+## Known scope of the current system
+
+- The active production path is meeting QA plus a small tool layer.
+- Some directories contain experiments or runtime artifacts and are not required for the core server path.
+- The repository still includes non-core material such as evaluation assets, audio experiments, and generated runtime files.
+
+## Recommended startup command
+
+Use:
+
+```powershell
+python run_server.py
+```
+
+instead of relying on `adk web .` directly, because `run_server.py` performs warmup and watcher startup before serving requests.

@@ -17,6 +17,13 @@ else:
     # Fallback to project root or default behavior
     load_dotenv()
 
+# --- Hotfix for Anaconda/Windows SSL_CERT_FILE issue ---
+# If SSL_CERT_FILE is set in the environment but the file doesn't exist,
+# it will crash httpx/openai clients. We safely remove it here.
+_ssl_cert = os.environ.get("SSL_CERT_FILE")
+if _ssl_cert and not Path(_ssl_cert).exists():
+    del os.environ["SSL_CERT_FILE"]
+
 # config path, may be need
 DATA_DIR = PROJECT_ROOT / "datademo"
 VECTOR_STORE_DIR = PROJECT_ROOT / "vector_store"
